@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estimador de desarrollo</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Estimaciones y vistas">
+      <div class="brand">Estimador</div>
+      <div id="sidebar"></div>
+    </aside>
+    <main class="content">
+      <div id="error-banner" class="banner error" role="alert" hidden></div>
+      <div id="main"></div>
+    </main>
+  </div>
+  <input type="file" accept="application/json" id="import-file" hidden>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

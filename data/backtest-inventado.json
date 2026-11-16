@@ -1,0 +1,332 @@
+{
+  "inventado": true,
+  "advertencia": "Datos INVENTADOS con supuestos de la literatura (mediana ×1,3, error común σ log 0,4, sorpresas ×1,8 en 1 de cada 8). Sirven para probar el backtest, NO para calibrar el modelo de un equipo real.",
+  "generadoCon": "node scripts/generate-invented-history.js",
+  "records": [
+    {
+      "id": "inventada-01",
+      "title": "INVENTADA — Filtro de búsqueda devuelve duplicados",
+      "answers": {
+        "taskType": "bug",
+        "anchorHours": 3,
+        "requirementsClarity": "definidos",
+        "complexity": "media",
+        "priorExperience": "parcial",
+        "externalDependencies": "pocas"
+      },
+      "actualHours": 25.5
+    },
+    {
+      "id": "inventada-02",
+      "title": "INVENTADA — Checkout con nuevo medio de pago",
+      "answers": {
+        "taskType": "feature",
+        "anchorHours": 24,
+        "requirementsClarity": "definidos",
+        "complexity": "media",
+        "priorExperience": "sí",
+        "externalDependencies": "múltiples"
+      },
+      "actualHours": 64.5
+    },
+    {
+      "id": "inventada-03",
+      "title": "INVENTADA — Exportar reportes a CSV",
+      "answers": {
+        "taskType": "feature",
+        "anchorHours": 8,
+        "requirementsClarity": "definidos",
+        "complexity": "baja",
+        "priorExperience": "sí",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 32
+    },
+    {
+      "id": "inventada-04",
+      "title": "INVENTADA — Migrar formularios a la nueva librería",
+      "answers": {
+        "taskType": "refactor",
+        "anchorHours": 16,
+        "requirementsClarity": "definidos",
+        "complexity": "alta",
+        "priorExperience": "parcial",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 45.5
+    },
+    {
+      "id": "inventada-05",
+      "title": "INVENTADA — Evaluar proveedor de notificaciones push",
+      "answers": {
+        "taskType": "spike",
+        "anchorHours": 6,
+        "requirementsClarity": "definidos",
+        "complexity": "media",
+        "priorExperience": "parcial",
+        "externalDependencies": "múltiples"
+      },
+      "actualHours": 11
+    },
+    {
+      "id": "inventada-06",
+      "title": "INVENTADA — Error 500 al subir imágenes grandes",
+      "answers": {
+        "taskType": "bug",
+        "anchorHours": 4,
+        "requirementsClarity": "ambiguos",
+        "complexity": "media",
+        "priorExperience": "sí",
+        "externalDependencies": "múltiples"
+      },
+      "actualHours": 57
+    },
+    {
+      "id": "inventada-07",
+      "title": "INVENTADA — Panel de métricas para administradores",
+      "answers": {
+        "taskType": "feature",
+        "anchorHours": 30,
+        "requirementsClarity": "parcial",
+        "complexity": "media",
+        "priorExperience": "sí",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 63.5
+    },
+    {
+      "id": "inventada-08",
+      "title": "INVENTADA — Separar módulo de pagos en servicios",
+      "answers": {
+        "taskType": "refactor",
+        "anchorHours": 28,
+        "requirementsClarity": "parcial",
+        "complexity": "alta",
+        "priorExperience": "sí",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 190
+    },
+    {
+      "id": "inventada-09",
+      "title": "INVENTADA — Login con Google",
+      "answers": {
+        "taskType": "feature",
+        "anchorHours": 12,
+        "requirementsClarity": "definidos",
+        "complexity": "alta",
+        "priorExperience": "no",
+        "externalDependencies": "múltiples"
+      },
+      "actualHours": 22
+    },
+    {
+      "id": "inventada-10",
+      "title": "INVENTADA — Fechas mal en zona horaria de México",
+      "answers": {
+        "taskType": "bug",
+        "anchorHours": 2,
+        "requirementsClarity": "definidos",
+        "complexity": "media",
+        "priorExperience": "sí",
+        "externalDependencies": "pocas"
+      },
+      "actualHours": 4
+    },
+    {
+      "id": "inventada-11",
+      "title": "INVENTADA — Investigar lentitud del listado de pedidos",
+      "answers": {
+        "taskType": "spike",
+        "anchorHours": 8,
+        "requirementsClarity": "parcial",
+        "complexity": "media",
+        "priorExperience": "sí",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 8
+    },
+    {
+      "id": "inventada-12",
+      "title": "INVENTADA — Carrito persistente entre dispositivos",
+      "answers": {
+        "taskType": "feature",
+        "anchorHours": 18,
+        "requirementsClarity": "definidos",
+        "complexity": "media",
+        "priorExperience": "sí",
+        "externalDependencies": "pocas"
+      },
+      "actualHours": 56
+    },
+    {
+      "id": "inventada-13",
+      "title": "INVENTADA — Reemplazar moment por date-fns",
+      "answers": {
+        "taskType": "refactor",
+        "anchorHours": 10,
+        "requirementsClarity": "ambiguos",
+        "complexity": "baja",
+        "priorExperience": "parcial",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 32.5
+    },
+    {
+      "id": "inventada-14",
+      "title": "INVENTADA — Botón de reintento no responde en iOS",
+      "answers": {
+        "taskType": "bug",
+        "anchorHours": 3,
+        "requirementsClarity": "ambiguos",
+        "complexity": "alta",
+        "priorExperience": "no",
+        "externalDependencies": "múltiples"
+      },
+      "actualHours": 17
+    },
+    {
+      "id": "inventada-15",
+      "title": "INVENTADA — Onboarding de usuarios nuevos en 3 pasos",
+      "answers": {
+        "taskType": "feature",
+        "anchorHours": 20,
+        "requirementsClarity": "parcial",
+        "complexity": "baja",
+        "priorExperience": "sí",
+        "externalDependencies": "pocas"
+      },
+      "actualHours": 64.5
+    },
+    {
+      "id": "inventada-16",
+      "title": "INVENTADA — Notificaciones por email de envío",
+      "answers": {
+        "taskType": "feature",
+        "anchorHours": 10,
+        "requirementsClarity": "parcial",
+        "complexity": "baja",
+        "priorExperience": "sí",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 45.5
+    },
+    {
+      "id": "inventada-17",
+      "title": "INVENTADA — Prueba de concepto de búsqueda semántica",
+      "answers": {
+        "taskType": "spike",
+        "anchorHours": 12,
+        "requirementsClarity": "parcial",
+        "complexity": "baja",
+        "priorExperience": "sí",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 28.5
+    },
+    {
+      "id": "inventada-18",
+      "title": "INVENTADA — Paginación rota con filtros combinados",
+      "answers": {
+        "taskType": "bug",
+        "anchorHours": 5,
+        "requirementsClarity": "definidos",
+        "complexity": "baja",
+        "priorExperience": "no",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 48
+    },
+    {
+      "id": "inventada-19",
+      "title": "INVENTADA — Unificar manejo de errores de la API",
+      "answers": {
+        "taskType": "refactor",
+        "anchorHours": 14,
+        "requirementsClarity": "definidos",
+        "complexity": "media",
+        "priorExperience": "sí",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 47.5
+    },
+    {
+      "id": "inventada-20",
+      "title": "INVENTADA — Integración con sistema de facturación",
+      "answers": {
+        "taskType": "feature",
+        "anchorHours": 36,
+        "requirementsClarity": "definidos",
+        "complexity": "media",
+        "priorExperience": "sí",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 90
+    },
+    {
+      "id": "inventada-21",
+      "title": "INVENTADA — Precio con descuento redondea mal",
+      "answers": {
+        "taskType": "bug",
+        "anchorHours": 2,
+        "requirementsClarity": "definidos",
+        "complexity": "alta",
+        "priorExperience": "no",
+        "externalDependencies": "múltiples"
+      },
+      "actualHours": 13.5
+    },
+    {
+      "id": "inventada-22",
+      "title": "INVENTADA — Modo oscuro en toda la app",
+      "answers": {
+        "taskType": "feature",
+        "anchorHours": 16,
+        "requirementsClarity": "parcial",
+        "complexity": "baja",
+        "priorExperience": "parcial",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 32.5
+    },
+    {
+      "id": "inventada-23",
+      "title": "INVENTADA — Tipar la capa de servicios con TypeScript",
+      "answers": {
+        "taskType": "refactor",
+        "anchorHours": 22,
+        "requirementsClarity": "definidos",
+        "complexity": "alta",
+        "priorExperience": "sí",
+        "externalDependencies": "pocas"
+      },
+      "actualHours": 91
+    },
+    {
+      "id": "inventada-24",
+      "title": "INVENTADA — Comparar librerías de gráficos",
+      "answers": {
+        "taskType": "spike",
+        "anchorHours": 4,
+        "requirementsClarity": "ambiguos",
+        "complexity": "alta",
+        "priorExperience": "no",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 8.5
+    },
+    {
+      "id": "inventada-25",
+      "title": "INVENTADA — Cupones con vencimiento y límite de uso",
+      "answers": {
+        "taskType": "feature",
+        "anchorHours": 14,
+        "requirementsClarity": "definidos",
+        "complexity": "alta",
+        "priorExperience": "sí",
+        "externalDependencies": "pocas"
+      },
+      "actualHours": 38
+    }
+  ]
+}

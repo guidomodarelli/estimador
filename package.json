@@ -1,0 +1,18 @@
+{
+  "name": "estimador",
+  "version": "0.1.0",
+  "description": "Calculadora de estimaciones de desarrollo de software: PERT, capacidad efectiva, planificación por dependencias y Monte Carlo.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "estimador": "./cli/estimate.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "serve": "node scripts/serve.js",
+    "estimate": "node cli/estimate.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

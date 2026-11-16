@@ -1,0 +1,31 @@
+{
+  "instrucciones": "Reemplazá estos dos ejemplos por tareas reales ya terminadas (idealmente 15 a 30). En 'answers' poné lo que habrías respondido el DÍA DE INICIO, no lo que sabés ahora. En 'actualHours' va el esfuerzo real total (no la duración calendario). Correlo con: node cli/estimate.js backtest data/backtest-plantilla.json",
+  "records": [
+    {
+      "id": "ejemplo-1",
+      "title": "EJEMPLO — reemplazar: bug en el filtro de búsqueda",
+      "answers": {
+        "taskType": "bug",
+        "anchorHours": 3,
+        "requirementsClarity": "definidos",
+        "complexity": "baja",
+        "priorExperience": "sí",
+        "externalDependencies": "ninguna"
+      },
+      "actualHours": 9
+    },
+    {
+      "id": "ejemplo-2",
+      "title": "EJEMPLO — reemplazar: nueva pantalla de reportes",
+      "answers": {
+        "taskType": "feature",
+        "anchorHours": 16,
+        "requirementsClarity": "parcial",
+        "complexity": "media",
+        "priorExperience": "parcial",
+        "externalDependencies": "pocas"
+      },
+      "actualHours": 52
+    }
+  ]
+}
