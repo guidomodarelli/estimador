@@ -14,7 +14,8 @@ const NESTED_LIST_INDENT = 2;
 /** Negritas sobre texto ya escapado. */
 const inlineHtml = (text) => escapeHtml(text).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 
-const tableCells = (line) => line.replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+/** Separa las celdas respetando los `\|` escapados, que son parte del texto. */
+const tableCells = (line) => line.replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/).map((cell) => cell.trim().replace(/\\\|/g, '|'));
 
 function tableHtml(lines) {
   const [headerLine, separatorLine, ...bodyLines] = lines;
@@ -76,7 +77,8 @@ export function markdownToHtml(markdown) {
       const quoted = collect((candidate) => candidate.startsWith('>')).map((candidate) => candidate.replace(/^>\s?/, ''));
       blocks.push(`<blockquote>${quoted.map(inlineHtml).join('<br>')}</blockquote>`);
     } else {
-      const paragraph = collect((candidate) => candidate.trim() && !HEADING_PATTERN.test(candidate) && !candidate.startsWith('|') && !LIST_ITEM_PATTERN.test(candidate) && !candidate.startsWith('>'));
+      // La línea actual se consume siempre (por ejemplo, un `|` suelto sin tabla): así el bucle siempre avanza.
+      const paragraph = [lines[index++], ...collect((candidate) => candidate.trim() && !HEADING_PATTERN.test(candidate) && !candidate.startsWith('|') && !LIST_ITEM_PATTERN.test(candidate) && !candidate.startsWith('>'))];
       blocks.push(`<p>${paragraph.map(inlineHtml).join(' ')}</p>`);
     }
   }

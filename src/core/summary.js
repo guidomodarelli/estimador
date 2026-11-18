@@ -1,3 +1,5 @@
+import { COMMUNICATED_PERCENTILE, CONTINGENCY_ACTIVITY_NAME, PERCENT_SCALE, SUMMARY_TECHNICAL_DETAIL_HEADING } from './constants/estimation.js';
+
 /** Locale de formato numérico y de fechas del resumen. */
 const SUMMARY_LOCALE = 'es-AR';
 const HOURS_FRACTION_DIGITS = 1;
@@ -34,9 +36,10 @@ export function describeUncertaintyModel(model) {
   return 'Rango con etapas que varían de forma independiente; tiende a quedar angosto si los errores de las etapas se mueven juntos.';
 }
 
-const PERCENT_SCALE = 100;
-const CONFIDENCE_PERCENTILE = 80;
-const CONTINGENCY_STAGE_NAME = 'Contingencia por riesgos';
+const CONFIDENCE_PERCENTILE = COMMUNICATED_PERCENTILE;
+
+/** Una celda de tabla Markdown no puede contener `|` sin escapar: partiría la fila en más columnas. */
+const tableCell = (text) => String(text).replace(/\|/g, '\\|');
 
 const FACTOR_LABELS = Object.freeze({
   complexity: 'Complejidad',
@@ -46,7 +49,7 @@ const findPercentile = (rows, percentile) => rows?.find((row) => row.percentile 
 
 /** Nombre legible de una actividad del plan (la contingencia no es una etapa). */
 function activityName(estimate, activityId) {
-  return estimate.stages.find((stage) => stage.id === activityId)?.name ?? CONTINGENCY_STAGE_NAME;
+  return estimate.stages.find((stage) => stage.id === activityId)?.name ?? CONTINGENCY_ACTIVITY_NAME;
 }
 
 /** Lo que necesita quien recibe la estimación: fechas con su rango, esfuerzo y factores, sin jerga del modelo. */
@@ -78,7 +81,7 @@ function stageTableLines(estimate) {
   lines.push(`|---|---:|---:|---:|---:|${hasContingency ? '---:|' : ''}---|---|`);
   for (const stage of estimate.stages) {
     const contingencyCell = hasContingency ? ` ${stage.contingencyHours ? formatHours(stage.contingencyHours) : '—'} |` : '';
-    lines.push(`| ${stage.name} | ${formatHours(stage.optimistic)} | ${formatHours(stage.mostLikely)} | ${formatHours(stage.pessimistic)} | ${formatHours(stage.expected)} |${contingencyCell} ${formatDate(stage.startDate)} | ${formatDate(stage.endDate)} |`);
+    lines.push(`| ${tableCell(stage.name)} | ${formatHours(stage.optimistic)} | ${formatHours(stage.mostLikely)} | ${formatHours(stage.pessimistic)} | ${formatHours(stage.expected)} |${contingencyCell} ${formatDate(stage.startDate)} | ${formatDate(stage.endDate)} |`);
   }
   const contingencyTotal = hasContingency ? ` **${formatHours(effort.contingencyHours)}** |` : '';
   lines.push(`| **Total** | **${formatHours(effort.optimistic)}** | **${formatHours(effort.mostLikely)}** | **${formatHours(effort.pessimistic)}** | **${formatHours(effort.expected)}** |${contingencyTotal} | |`, '');
@@ -149,7 +152,7 @@ export function renderMarkdownSummary(estimate) {
     lines.push('## Advertencias', '', ...estimate.warnings.map((warning) => `- ${warning}`), '');
   }
 
-  lines.push('## Detalle técnico', '');
+  lines.push(SUMMARY_TECHNICAL_DETAIL_HEADING, '');
   lines.push(...stageTableLines(estimate), ...capacityLines(estimate), ...durationLines(estimate), ...rangeLines(estimate.simulation));
   lines.push(
     '### Cómo se calcula',

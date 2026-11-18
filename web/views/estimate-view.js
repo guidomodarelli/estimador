@@ -1,5 +1,7 @@
 import {
+  COMMUNICATED_PERCENTILE,
   COMPLEXITY_LABELS,
+  CONTINGENCY_ACTIVITY_NAME,
   COMPLEXITY_OPTIONS,
   DEFAULT_DEVELOPMENT_HOURS,
   describeUncertaintyModel,
@@ -9,6 +11,7 @@ import {
   renderMarkdownSummary,
   RFC_PART_LABELS,
   RFC_PART_OPTIONS,
+  SUMMARY_TECHNICAL_DETAIL_HEADING,
 } from '../../src/core/index.js';
 import { renderGantt } from '../charts/gantt.js';
 import { renderProbabilityCurve } from '../charts/probability-curve.js';
@@ -20,11 +23,13 @@ import { actualTotal, calibrationFor, ESTIMATE_STATUS, isDoubleCountWarning, ref
 import { TAB } from '../state/store.js';
 
 export const NEW_PERSON_OPTION_VALUE = '__new-person__';
-/** Clave del plegable de etapas (su estado abierto se recuerda entre renders). */
-export const STAGES_FOLD_KEY = 'stages';
-const CONFIDENCE_PERCENTILE = 80;
-/** El resumen compartible separa lo que lee producto del detalle de cálculo con este título. */
-const TECHNICAL_DETAIL_HEADING = '## Detalle técnico';
+const CONFIDENCE_PERCENTILE = COMMUNICATED_PERCENTILE;
+
+/** Clave del plegable de etapas de una estimación: lo que el usuario elige se recuerda por estimación. */
+export const stagesFoldKey = (estimateId) => `stages:${estimateId}`;
+
+/** Estado de la tabla de etapas cuando el usuario las ajustó a mano (lo usan la vista y la app). */
+export const CUSTOMIZED_STAGES_STATUS_HTML = 'Ajustaste las etapas a mano, así que la complejidad ya no las recalcula. <button type="button" class="button link" data-action="regenerate-stages">Volver a calcularlas</button>';
 
 const TABS = Object.freeze([
   { id: TAB.ESTIMATE, label: 'Estimar' },
@@ -79,7 +84,7 @@ function quickHtml(context) {
       ? `<label class="inline-check"><input type="checkbox" data-bind="project.quick.applyCalibration"> Ajustar con mi historial (lo real fue ×${formatDays(calibration.medianRatio)} lo estimado)</label>`
       : '';
   const status = answers.customized
-    ? `Ajustaste las etapas a mano, así que la complejidad ya no las recalcula. <button type="button" class="button link" data-action="regenerate-stages">Volver a calcularlas</button>`
+    ? CUSTOMIZED_STAGES_STATUS_HTML
     : 'RFC → Desarrollo → Pruebas → Rollout → Demo o evidencia: los tiempos salen de la complejidad.';
   return `<section class="quick" aria-labelledby="quick-heading">
     <h2 id="quick-heading" class="section-title">Iniciativa</h2>
@@ -169,9 +174,11 @@ function stageTableHtml(context) {
     })
     .join('');
   // Con solo la complejidad alcanza: la tabla queda plegada hasta que alguien la abre o la edita.
-  const isOpen = estimate.project.quick?.customized || openStageRows.size > 0 || context.openFolds?.has(STAGES_FOLD_KEY);
+  // Lo que el usuario eligió al abrir o cerrar manda; si no eligió nada, se abre solo cuando hay ajustes a mano.
+  const foldKey = stagesFoldKey(estimate.id);
+  const isOpen = openStageRows.size > 0 || (context.foldStates?.get(foldKey) ?? Boolean(estimate.project.quick?.customized));
   const includedCount = stages.filter((stage) => stage.included !== false).length;
-  return `<details class="fold stages" data-fold-key="${STAGES_FOLD_KEY}"${isOpen ? ' open' : ''}>
+  return `<details class="fold stages" data-fold-key="${escapeHtml(foldKey)}"${isOpen ? ' open' : ''}>
     <summary><span class="section-title" id="stages-heading">Etapas</span> <span class="summary-hint">${includedCount} etapas · horas mín., probables y máx. de cada una</span></summary>
     <div class="table-scroll"><table class="stage-table" aria-labelledby="stages-heading">
       <thead><tr><th><span class="sr-only">Incluir</span></th><th>Etapa</th><th title="Horas si todo sale bien">Mín.</th><th title="Horas más probables">Probable</th><th title="Horas si se complica">Máx.</th><th title="Promedio ponderado: (mín. + 4 × probable + máx.) / 6">Esperado</th>${showAssignee ? '<th>Responsable</th>' : ''}<th>Después de</th><th><span class="sr-only">Eliminar</span></th></tr></thead>
@@ -285,7 +292,7 @@ function warningsHtml(result) {
 
 /** Vista previa del resumen: lo que lee producto a la vista y el detalle de cálculo plegado. */
 function sharePreviewHtml(markdown) {
-  const [summary, technical] = markdown.split(TECHNICAL_DETAIL_HEADING);
+  const [summary, technical] = markdown.split(SUMMARY_TECHNICAL_DETAIL_HEADING);
   return `${markdownToHtml(summary)}${technical ? `<details class="fold"><summary>Detalle técnico</summary>${markdownToHtml(technical)}</details>` : ''}`;
 }
 
@@ -326,7 +333,7 @@ export function renderEstimateResults(result, context) {
 
   if (ui.tab === TAB.PLAN) {
     const contingency = result.schedule.activities.find((activity) => !result.stages.some((stage) => stage.id === activity.id));
-    const rows = [...result.stages, ...(contingency ? [{ ...contingency, name: 'Contingencia por riesgos' }] : [])];
+    const rows = [...result.stages, ...(contingency ? [{ ...contingency, name: CONTINGENCY_ACTIVITY_NAME }] : [])];
     const dependencies = result.schedule.activities.flatMap((activity) => {
       const stage = estimate.project.stages.find((candidate) => candidate.id === activity.id);
       return (stage?.dependsOn ?? []).map((dependencyId) => ({ from: dependencyId, to: activity.id }));

@@ -5,8 +5,12 @@ import { addDays, dayIndex, shortDate } from './svg.js';
 const LABEL_WIDTH = 190;
 const ROW_HEIGHT = 28;
 const BAR_HEIGHT = 14;
-/** Dos renglones: fechas arriba y, debajo, las etiquetas de las marcas (P80, hoy). */
-const HEADER_HEIGHT = 42;
+/** Renglón de fechas del encabezado; debajo van uno o más renglones con las etiquetas de las marcas (P80, hoy). */
+const DATE_ROW_HEIGHT = 26;
+const MARKER_ROW_HEIGHT = 16;
+/** Ancho aproximado de un carácter de las etiquetas de marcas, para detectar etiquetas que se pisan. */
+const MARKER_LABEL_CHAR_WIDTH_PX = 6.5;
+const MARKER_LABEL_GAP_PX = 6;
 const MIN_DAY_WIDTH = 16;
 const TARGET_TIMELINE_WIDTH = 820;
 const ARROW_ELBOW_PX = 8;
@@ -27,6 +31,24 @@ const ARROW_ELBOW_PX = 8;
  * @param {import('../../src/core/calendar.js').WorkCalendar} input.calendar
  * @param {Array<{date: string, label: string, kind: 'p80'|'today'}>} [input.markers] Líneas verticales de referencia (fin P80, hoy).
  */
+/**
+ * Ubica cada etiqueta de marca (alineada a la derecha de su línea) en el primer renglón donde no pisa a otra.
+ * @returns {Array<{marker: object, x: number, row: number}>}
+ */
+export function placeMarkerLabels(markers, xOf) {
+  const rowRightEdges = [];
+  return markers
+    .map((marker) => ({ marker, x: xOf(marker) }))
+    .sort((left, right) => left.x - right.x)
+    .map((label) => {
+      const labelLeft = label.x - 3 - label.marker.label.length * MARKER_LABEL_CHAR_WIDTH_PX;
+      let row = rowRightEdges.findIndex((rightEdge) => rightEdge + MARKER_LABEL_GAP_PX <= labelLeft);
+      if (row === -1) row = rowRightEdges.length;
+      rowRightEdges[row] = label.x;
+      return { ...label, row };
+    });
+}
+
 export function renderGantt({ rows, scheduledActivities, dependencies, waitDaysById, criticalChain, startDate, endDate: planEndDate, calendar, markers = [] }) {
   const visibleRows = rows.filter((row) => row.startDate && row.endDate);
   // El eje se estira hasta la marca más tardía (el P80 suele caer después del fin del plan); hoy se muestra solo si cae en el rango.
@@ -35,6 +57,9 @@ export function renderGantt({ rows, scheduledActivities, dependencies, waitDaysB
   const totalDays = dayIndex(endDate, startDate) + 1;
   const dayWidth = Math.max(MIN_DAY_WIDTH, TARGET_TIMELINE_WIDTH / totalDays);
   const width = LABEL_WIDTH + totalDays * dayWidth + 8;
+  const markerLabels = placeMarkerLabels(visibleMarkers, (marker) => LABEL_WIDTH + dayIndex(marker.date, startDate) * dayWidth + (marker.kind === 'today' ? 0 : dayWidth));
+  const markerRowCount = Math.max(1, ...markerLabels.map((label) => label.row + 1));
+  const HEADER_HEIGHT = DATE_ROW_HEIGHT + markerRowCount * MARKER_ROW_HEIGHT;
   const height = HEADER_HEIGHT + visibleRows.length * ROW_HEIGHT + 4;
   const rowIndexById = new Map(visibleRows.map((row, index) => [row.id, index]));
   const critical = new Set(criticalChain);
@@ -90,10 +115,10 @@ export function renderGantt({ rows, scheduledActivities, dependencies, waitDaysB
     })
     .join('');
 
-  const markerLines = visibleMarkers
-    .map((marker) => {
-      const x = marker.kind === 'today' ? xStart(marker.date) : xEnd(marker.date);
-      return `<g class="gantt-marker ${marker.kind}"><line x1="${x}" x2="${x}" y1="${HEADER_HEIGHT - 2}" y2="${height}"></line><text x="${x - 3}" y="${HEADER_HEIGHT - 6}" text-anchor="end">${escapeHtml(marker.label)}</text></g>`;
+  const markerLines = markerLabels
+    .map(({ marker, x, row }) => {
+      const labelY = DATE_ROW_HEIGHT + (row + 1) * MARKER_ROW_HEIGHT - 4;
+      return `<g class="gantt-marker ${marker.kind}"><line x1="${x}" x2="${x}" y1="${labelY + 4}" y2="${height}"></line><text x="${x - 3}" y="${labelY}" text-anchor="end">${escapeHtml(marker.label)}</text></g>`;
     })
     .join('');
 

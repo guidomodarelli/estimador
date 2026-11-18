@@ -1,4 +1,5 @@
 import {
+  CONTINGENCY_ACTIVITY_NAME,
   DEDUCTION_SCOPE,
   DEFAULT_ASSIGNEE_ID,
   DEFAULT_SIMULATION_RUNS,
@@ -110,7 +111,7 @@ export function buildEstimate(project, options = {}) {
     const dependedOn = new Set(activities.flatMap((activity) => activity.dependsOn));
     activities.push({
       id: CONTINGENCY_ACTIVITY_ID,
-      name: 'Contingencia por riesgos',
+      name: CONTINGENCY_ACTIVITY_NAME,
       assigneeId: defaultAssigneeId,
       dependsOn: activities.filter((activity) => !dependedOn.has(activity.id)).map((activity) => activity.id),
       waitWorkingDaysAfter: 0,

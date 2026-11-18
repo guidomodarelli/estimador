@@ -4,7 +4,7 @@ import { buildEstimate, createSampleProject, renderMarkdownSummary } from '../sr
 import { computeEstimate, createNewEstimate, regenerateStages } from '../web/state/estimates.js';
 import { markdownToHtml } from '../web/utils/markdown.js';
 import { describeDateList, isValidIsoDate } from '../web/utils/date-list.js';
-import { renderGantt } from '../web/charts/gantt.js';
+import { placeMarkerLabels, renderGantt } from '../web/charts/gantt.js';
 import { pluralize } from '../web/utils/text.js';
 
 const MONDAY = '2026-11-16';
@@ -41,6 +41,14 @@ describe('Resumen para compartir', () => {
     assert.doesNotMatch(markdown, /Complejidad: baja/);
   });
 
+  it('escapa los | de los nombres de etapa para no romper la tabla', () => {
+    const estimate = createNewEstimate(MONDAY);
+    estimate.project.stages[0].name = 'Front | Back';
+    const markdown = renderMarkdownSummary(computeEstimate(estimate, TEAM, [], 0));
+    const stageRow = markdown.split('\n').find((line) => line.startsWith('| Front'));
+    assert.match(stageRow, /^\| Front \\\| Back \|/);
+  });
+
   it('nombra a las personas por su nombre en la capacidad', () => {
     const estimate = createNewEstimate(MONDAY);
     assert.match(renderMarkdownSummary(computeEstimate(estimate, TEAM, [], 0)), /\*\*Ana\*\*: 5 h por día/);
@@ -55,6 +63,15 @@ describe('Vista previa del Markdown', () => {
     assert.match(html, /<th class="numeric">Horas<\/th>/);
     assert.match(html, /<td class="numeric">3 h<\/td>/);
     assert.match(html, /<blockquote>nota<\/blockquote>/);
+  });
+
+  it('no se cuelga con una línea que empieza con | y no es una tabla', () => {
+    assert.match(markdownToHtml('| suelto\ntexto'), /<p>\| suelto texto<\/p>/);
+  });
+
+  it('respeta los | escapados dentro de una celda', () => {
+    const html = markdownToHtml('| Etapa | Horas |\n|---|---:|\n| Front \\| Back | 3 h |');
+    assert.match(html, /<td>Front \| Back<\/td><td class="numeric">3 h<\/td>/);
   });
 
   it('escapa el HTML que venga en nombres o supuestos', () => {
@@ -101,6 +118,12 @@ describe('Gantt', () => {
     const withParallel = renderGantt({ ...baseInput, rows: [...baseInput.rows, parallelRow] });
     assert.equal(withParallel.match(/· crítica/g).length, 1);
     assert.doesNotMatch(renderGantt(baseInput), /· crítica/);
+  });
+
+  it('baja a otro renglón la etiqueta que pisaría a la anterior', () => {
+    const markers = [{ label: 'Hoy', kind: 'today', x: 300 }, { label: 'P80 mié, 9 dic 2026', kind: 'p80', x: 320 }, { label: 'Lejos', kind: 'p80', x: 900 }];
+    const rows = placeMarkerLabels(markers, (marker) => marker.x).map((label) => label.row);
+    assert.deepEqual(rows, [0, 1, 0]);
   });
 
   it('omite la marca de hoy si cae fuera del plan', () => {

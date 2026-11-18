@@ -3,7 +3,7 @@ import { byId, downloadFile, getAtPath, parseInputValue, preserveFocus, setAtPat
 import { loadStore, parseImportedStore, saveStore, TAB, VIEW } from './state/store.js';
 import { actualTotal, computeEstimate, createNewEstimate, ESTIMATE_STATUS, refreshSummary, regenerateStages, summarizeResult } from './state/estimates.js';
 import { renderSidebar } from './views/sidebar.js';
-import { NEW_PERSON_OPTION_VALUE, renderEstimateResults, renderEstimateView } from './views/estimate-view.js';
+import { CUSTOMIZED_STAGES_STATUS_HTML, NEW_PERSON_OPTION_VALUE, renderEstimateResults, renderEstimateView } from './views/estimate-view.js';
 import { pluralize } from './utils/text.js';
 import { capacityText, datePreviewHtml, renderTeamView } from './views/team-view.js';
 import { renderHistoryView } from './views/history-view.js';
@@ -28,10 +28,13 @@ let summaryTimer = null;
 let lastResult = null;
 /** Filas de etapa con "más opciones" abiertas: stageId → { snapshot, addingPerson }. */
 const openStageRows = new Map();
-/** Plegables que el usuario abrió a mano (por `data-fold-key`): siguen abiertos aunque se vuelva a renderizar. */
-const openFolds = new Set();
-/** Atajos de teclado con Alt (no chocan con los del navegador ni con la escritura). */
-const ALT_SHORTCUT_ACTIONS = Object.freeze({ n: 'new-estimate', c: 'copy-summary' });
+/** Plegables que el usuario abrió o cerró a mano (`data-fold-key` → abierto): la elección sobrevive a los re-renders. */
+const foldStates = new Map();
+/**
+ * Atajos con Alt, por tecla física (`event.code`): en macOS, Option+letra produce otro carácter
+ * en `event.key`, así que la letra no sirve para reconocerlos.
+ */
+const ALT_SHORTCUT_ACTIONS = Object.freeze({ KeyN: 'new-estimate', KeyC: 'copy-summary' });
 
 const currentEstimate = () => store.estimates.find((estimate) => estimate.id === store.ui.estimateId) ?? null;
 const bindingRoot = () => ({ project: currentEstimate()?.project, team: store.team, actuals: currentEstimate()?.actuals });
@@ -56,7 +59,7 @@ function renderMain() {
     return renderMain();
   }
   preserveFocus(() => {
-    if (view === VIEW.ESTIMATE) main.innerHTML = renderEstimateView({ estimate: currentEstimate(), team: store.team, history: store.history, ui: store.ui, openStageRows, openFolds });
+    if (view === VIEW.ESTIMATE) main.innerHTML = renderEstimateView({ estimate: currentEstimate(), team: store.team, history: store.history, ui: store.ui, openStageRows, foldStates });
     if (view === VIEW.TEAM) main.innerHTML = renderTeamView(store, focusPersonId);
     if (view === VIEW.HISTORY) main.innerHTML = renderHistoryView(store);
     if (view === VIEW.QUARTER) {
@@ -130,7 +133,7 @@ function markStagesCustomized() {
   if (!quick || quick.customized) return;
   quick.customized = true;
   const status = byId('quick-status');
-  if (status) status.innerHTML = 'Editaste las etapas a mano: las respuestas ya no las regeneran. <button type="button" class="button link" data-action="regenerate-stages">Regenerar</button>';
+  if (status) status.innerHTML = CUSTOMIZED_STAGES_STATUS_HTML;
 }
 
 /** Regenera las etapas tras cambiar una respuesta; devuelve false si la respuesta no es válida. */
@@ -504,17 +507,18 @@ document.addEventListener('click', async (event) => {
   render();
 });
 
-// `toggle` no burbujea: se escucha en captura para recordar los plegables abiertos.
-document.addEventListener('toggle', (event) => {
-  const foldKey = event.target.dataset?.foldKey;
-  if (!foldKey) return;
-  if (event.target.open) openFolds.add(foldKey);
-  else openFolds.delete(foldKey);
-}, true);
+// Se escucha el clic en el `summary` (también lo dispara el teclado) y no el evento `toggle`,
+// que el navegador también emite al renderizar un `<details open>` y no distingue la elección del usuario.
+document.addEventListener('click', (event) => {
+  const summary = event.target.closest?.('summary');
+  const details = summary?.parentElement;
+  if (!details?.dataset.foldKey || details.querySelector(':scope > summary') !== summary) return;
+  foldStates.set(details.dataset.foldKey, !details.open);
+});
 
 document.addEventListener('keydown', (event) => {
   const target = event.target;
-  const shortcutAction = event.altKey && !event.ctrlKey && !event.metaKey ? ALT_SHORTCUT_ACTIONS[event.key.toLowerCase()] : null;
+  const shortcutAction = event.altKey && !event.ctrlKey && !event.metaKey ? ALT_SHORTCUT_ACTIONS[event.code] : null;
   if (shortcutAction) {
     const trigger = document.querySelector(`button[data-action="${shortcutAction}"]`);
     if (trigger) {

@@ -36,6 +36,14 @@ export const DEFAULT_SIMULATION_RUNS = 2000;
 export const DEFAULT_SIMULATION_SEED = 42;
 /** Percentiles reportados por la simulación. */
 export const REPORTED_PERCENTILES = Object.freeze([50, 80, 90]);
+/** Percentil que se comunica como fecha comprometida ("con 80 % de confianza"). */
+export const COMMUNICATED_PERCENTILE = 80;
+/** Escala de una proporción (0–1) a porcentaje. */
+export const PERCENT_SCALE = 100;
+/** Nombre visible de la actividad que agrupa la contingencia por riesgos. */
+export const CONTINGENCY_ACTIVITY_NAME = 'Contingencia por riesgos';
+/** Título que separa, en el resumen compartible, lo que lee producto del detalle de cálculo. */
+export const SUMMARY_TECHNICAL_DETAIL_HEADING = '## Detalle técnico';
 
 /** Tolerancia numérica para comparar horas. */
 export const HOURS_EPSILON = 1e-9;
