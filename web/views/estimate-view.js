@@ -14,11 +14,17 @@ import { renderGantt } from '../charts/gantt.js';
 import { renderProbabilityCurve } from '../charts/probability-curve.js';
 import { renderStepBars } from '../charts/step-bars.js';
 import { byId, escapeHtml, optionsHtml } from '../utils/dom.js';
+import { markdownToHtml } from '../utils/markdown.js';
 import { iconSvg } from '../utils/icons.js';
 import { actualTotal, calibrationFor, ESTIMATE_STATUS, isDoubleCountWarning, referenceClassRatios } from '../state/estimates.js';
 import { TAB } from '../state/store.js';
 
 export const NEW_PERSON_OPTION_VALUE = '__new-person__';
+/** Clave del plegable de etapas (su estado abierto se recuerda entre renders). */
+export const STAGES_FOLD_KEY = 'stages';
+const CONFIDENCE_PERCENTILE = 80;
+/** El resumen compartible separa lo que lee producto del detalle de cálculo con este título. */
+const TECHNICAL_DETAIL_HEADING = '## Detalle técnico';
 
 const TABS = Object.freeze([
   { id: TAB.ESTIMATE, label: 'Estimar' },
@@ -73,10 +79,10 @@ function quickHtml(context) {
       ? `<label class="inline-check"><input type="checkbox" data-bind="project.quick.applyCalibration"> Ajustar con mi historial (lo real fue ×${formatDays(calibration.medianRatio)} lo estimado)</label>`
       : '';
   const status = answers.customized
-    ? `Editaste las etapas a mano: las respuestas ya no las regeneran. <button type="button" class="button link" data-action="regenerate-stages">Regenerar</button>`
+    ? `Ajustaste las etapas a mano, así que la complejidad ya no las recalcula. <button type="button" class="button link" data-action="regenerate-stages">Volver a calcularlas</button>`
     : 'RFC → Desarrollo → Pruebas → Rollout → Demo o evidencia: los tiempos salen de la complejidad.';
   return `<section class="quick" aria-labelledby="quick-heading">
-    <h2 id="quick-heading" class="section-title">Preguntas</h2>
+    <h2 id="quick-heading" class="section-title">Iniciativa</h2>
     ${choiceRowHtml('project.quick.complexity', 'Complejidad', COMPLEXITY_OPTIONS.map((complexity) => ({ value: complexity, label: COMPLEXITY_LABELS[complexity] })))}
     <div class="choice-row">
       <span class="choice-label" id="rfc-parts-label">El RFC incluye</span>
@@ -152,9 +158,9 @@ function stageTableHtml(context) {
       return `<tr class="stage-row${disabled ? ' disabled' : ''}">
         <td><input type="checkbox" aria-label="Incluir ${escapeHtml(stage.name)}" data-bind="project.stages.${index}.included" data-invert-false data-rerender></td>
         <td><input type="text" class="cell-text" aria-label="Nombre de la etapa" data-bind="project.stages.${index}.name"></td>
-        <td><input type="number" min="0" step="0.5" class="cell-number" aria-label="Optimista de ${escapeHtml(stage.name)}" data-bind="project.stages.${index}.optimistic" data-type="number"></td>
-        <td><input type="number" min="0" step="0.5" class="cell-number" aria-label="Probable de ${escapeHtml(stage.name)}" data-bind="project.stages.${index}.mostLikely" data-type="number"></td>
-        <td><input type="number" min="0" step="0.5" class="cell-number" aria-label="Pesimista de ${escapeHtml(stage.name)}" data-bind="project.stages.${index}.pessimistic" data-type="number"></td>
+        <td><input type="number" min="0" step="0.5" class="cell-number" aria-label="Horas mínimas de ${escapeHtml(stage.name)}" data-bind="project.stages.${index}.optimistic" data-type="number"></td>
+        <td><input type="number" min="0" step="0.5" class="cell-number" aria-label="Horas probables de ${escapeHtml(stage.name)}" data-bind="project.stages.${index}.mostLikely" data-type="number"></td>
+        <td><input type="number" min="0" step="0.5" class="cell-number" aria-label="Horas máximas de ${escapeHtml(stage.name)}" data-bind="project.stages.${index}.pessimistic" data-type="number"></td>
         <td class="computed" id="stage-expected-${index}">—</td>
         ${showAssignee ? `<td>${assigneeSelectHtml(stage, index, team)}</td>` : ''}
         <td><button type="button" class="button link start-after" data-action="toggle-stage-options" data-index="${index}" aria-expanded="${Boolean(openState)}">${escapeHtml(describeStart(stage, stages))}</button>${stage.waitWorkingDaysAfter ? `<small class="wait-note">+${stage.waitWorkingDaysAfter} d de espera</small>` : ''}</td>
@@ -162,17 +168,18 @@ function stageTableHtml(context) {
       </tr>${openState ? stageOptionsRowHtml(stage, index, stages, openState, team, columnCount) : ''}`;
     })
     .join('');
-  return `<section class="stages" aria-labelledby="stages-heading">
-    <div class="section-head">
-      <h2 id="stages-heading" class="section-title">Etapas</h2>
-      <button type="button" class="button" data-action="add-stage">+ Etapa</button>
-    </div>
-    <div class="table-scroll"><table class="stage-table">
-      <thead><tr><th><span class="sr-only">Incluir</span></th><th>Etapa</th><th title="Optimista">O</th><th title="Más probable">M</th><th title="Pesimista">P</th><th>Esperado</th>${showAssignee ? '<th>Responsable</th>' : ''}<th>Después de</th><th><span class="sr-only">Eliminar</span></th></tr></thead>
+  // Con solo la complejidad alcanza: la tabla queda plegada hasta que alguien la abre o la edita.
+  const isOpen = estimate.project.quick?.customized || openStageRows.size > 0 || context.openFolds?.has(STAGES_FOLD_KEY);
+  const includedCount = stages.filter((stage) => stage.included !== false).length;
+  return `<details class="fold stages" data-fold-key="${STAGES_FOLD_KEY}"${isOpen ? ' open' : ''}>
+    <summary><span class="section-title" id="stages-heading">Etapas</span> <span class="summary-hint">${includedCount} etapas · horas mín., probables y máx. de cada una</span></summary>
+    <div class="table-scroll"><table class="stage-table" aria-labelledby="stages-heading">
+      <thead><tr><th><span class="sr-only">Incluir</span></th><th>Etapa</th><th title="Horas si todo sale bien">Mín.</th><th title="Horas más probables">Probable</th><th title="Horas si se complica">Máx.</th><th title="Promedio ponderado: (mín. + 4 × probable + máx.) / 6">Esperado</th>${showAssignee ? '<th>Responsable</th>' : ''}<th>Después de</th><th><span class="sr-only">Eliminar</span></th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr><td></td><td>Total</td><td id="total-optimistic">—</td><td id="total-most-likely">—</td><td id="total-pessimistic">—</td><td id="total-expected" class="computed">—</td><td colspan="${showAssignee ? 3 : 2}" id="total-note"></td></tr></tfoot>
     </table></div>
-  </section>`;
+    <div class="row-actions"><button type="button" class="button" data-action="add-stage">+ Etapa</button></div>
+  </details>`;
 }
 
 function actualsHtml(context) {
@@ -180,7 +187,7 @@ function actualsHtml(context) {
   const included = estimate.project.stages.filter((stage) => stage.included !== false);
   const isDone = estimate.status === ESTIMATE_STATUS.DONE;
   return `<details class="fold"${isDone ? ' open' : ''}>
-    <summary>${isDone ? 'Horas reales registradas' : 'Terminé la tarea: registrar horas reales'}</summary>
+    <summary>${isDone ? 'Horas reales registradas' : 'Terminé la iniciativa: registrar horas reales'}</summary>
     <p class="note">Con 5 iniciativas terminadas de la misma complejidad, el rango de las próximas sale de tu historial.</p>
     <div class="actuals-grid">${included
       .map((stage) => `<label>${escapeHtml(stage.name)}<input type="number" min="0" step="0.5" placeholder="horas" data-bind="actuals.${escapeHtml(stage.id)}" data-type="optional-number"${isDone ? ' disabled' : ''}></label>`)
@@ -220,15 +227,15 @@ function risksHtml(context) {
       <td><input type="number" min="0" max="100" step="5" class="cell-number" aria-label="Probabilidad (%)" data-bind="project.risks.${index}.probability" data-type="percent"></td>
       <td><input type="number" min="0" step="0.5" class="cell-number" aria-label="Impacto (h)" data-bind="project.risks.${index}.impactHours" data-type="number"></td>
       <td><select class="cell-select" aria-label="Etapa afectada" data-bind="project.risks.${index}.activityId" data-type="optional-text">${optionsHtml(stageOptions, risk.activityId ?? '')}</select></td>
-      <td><input type="checkbox" aria-label="Ya contemplado en la pesimista" data-bind="project.risks.${index}.includedInPessimistic"></td>
+      <td><input type="checkbox" aria-label="Ya contemplado en las horas máximas" data-bind="project.risks.${index}.includedInPessimistic"></td>
       <td><button type="button" class="button icon" data-action="remove-risk" data-index="${index}" aria-label="Eliminar riesgo">${iconSvg('close')}</button></td>
     </tr>`)
     .join('');
   return `<section aria-labelledby="risks-heading">
     <div class="section-head"><h2 id="risks-heading" class="section-title">Riesgos</h2><button type="button" class="button" data-action="add-risk">+ Riesgo</button></div>
     ${rows ? `<div class="table-scroll"><table class="data-table">
-      <thead><tr><th>Riesgo</th><th>Prob. %</th><th>Impacto h</th><th>Afecta a</th><th title="Ya contemplado en la estimación pesimista">Ya en P</th><th><span class="sr-only">Eliminar</span></th></tr></thead>
-      <tbody>${rows}</tbody></table></div>` : '<p class="note">Sin riesgos. Agregá los concretos: probabilidad × impacto se suma como contingencia.</p>'}
+      <thead><tr><th>Riesgo</th><th>Prob. %</th><th>Impacto h</th><th>Afecta a</th><th title="Ya contemplado en las horas máximas de la etapa: no se suma de nuevo">Ya en el máx.</th><th><span class="sr-only">Eliminar</span></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>` : '<p class="note">Sin riesgos. Agregá los concretos: su probabilidad por su impacto se suma como contingencia.</p>'}
   </section>`;
 }
 
@@ -239,9 +246,11 @@ export function renderEstimateView(context) {
   const { ui } = context;
   const panels = {
     [TAB.ESTIMATE]: () => estimateTabHtml(context),
-    [TAB.PLAN]: () => '<div id="plan-chart" class="gantt-wrapper table-scroll"></div><div class="legend"><span class="legend-item">Etapa</span><span class="legend-item critical">Cadena crítica</span><span class="legend-item wait">Espera</span><span class="legend-item offday">No laborable</span></div><p class="note" id="plan-note"></p>',
+    [TAB.PLAN]: () => '<div id="plan-chart" class="gantt-wrapper table-scroll"></div><div class="legend"><span class="legend-item">Etapa</span><span class="legend-item critical">Cadena crítica (con borde)</span><span class="legend-item wait">Espera</span><span class="legend-item offday">No laborable</span><span class="legend-item p80">Fin con 80 % de confianza</span><span class="legend-item today">Hoy</span></div><p class="note" id="plan-note"></p>',
     [TAB.UNCERTAINTY]: () => `<div class="uncertainty-grid"><div><h2 class="section-title">Probabilidad de terminar antes de cada fecha</h2><div id="probability-curve"></div><p class="note" id="model-note"></p></div><div id="percentiles"></div></div>${risksHtml(context)}`,
-    [TAB.SHARE]: () => `<div class="row-actions"><button type="button" class="button primary" data-action="copy-summary">Copiar resumen (Markdown)</button><button type="button" class="button" data-action="download-summary">Descargar .md</button><button type="button" class="button" data-action="export-estimate">Exportar esta estimación (JSON)</button></div><pre id="share-preview" class="share-preview"></pre>`,
+    [TAB.SHARE]: () => `<p class="muted share-intro">Así lo va a leer quien lo reciba. Se copia en Markdown, listo para pegar en un documento, Slack o Jira.</p>
+      <div class="row-actions"><button type="button" class="button primary" data-action="copy-summary" title="Copiar resumen (Alt+C)">Copiar resumen</button><button type="button" class="button" data-action="download-summary">Descargar .md</button><button type="button" class="button" data-action="export-estimate">Exportar esta estimación (JSON)</button></div>
+      <article id="share-preview" class="share-preview" aria-label="Vista previa del resumen"></article>`,
   };
   return `${headerHtml(context.estimate)}${tabsHtml(ui.tab)}<div id="tab-panel" role="tabpanel" aria-labelledby="tab-${ui.tab}" class="tab-panel">${panels[ui.tab]()}</div>`;
 }
@@ -250,7 +259,7 @@ export function renderEstimateView(context) {
 function leadStatHtml(result) {
   const rollout = result.milestones?.[0];
   if (!rollout) return '';
-  const p80 = rollout.percentiles.find((row) => row.percentile === 80);
+  const p80 = rollout.percentiles.find((row) => row.percentile === CONFIDENCE_PERCENTILE);
   return `<div class="stat lead">
     <span class="stat-label">Fecha de rollout</span>
     <span class="stat-value">${formatDate(rollout.plannedDate)}</span>
@@ -259,29 +268,38 @@ function leadStatHtml(result) {
 }
 
 function statsHtml(result) {
-  const p80 = result.simulation?.percentiles.find((row) => row.percentile === 80);
+  const p80 = result.simulation?.percentiles.find((row) => row.percentile === CONFIDENCE_PERCENTILE);
   return `
     ${leadStatHtml(result)}
     <div class="stat"><span class="stat-label">Fin probable</span><span class="stat-value">${formatDate(result.schedule.endDate)}</span><span class="stat-hint">${result.duration.scheduledWorkingDays} días laborales</span></div>
-    ${p80 ? `<div class="stat"><span class="stat-label">Fin P80</span><span class="stat-value">${formatDate(p80.endDate)}</span><span class="stat-hint">${p80.workingDays} días laborales</span></div>` : ''}
-    <div class="stat"><span class="stat-label">Esfuerzo esperado</span><span class="stat-value">${formatHours(result.effort.totalExpected)}</span><span class="stat-hint">${formatHours(result.effort.optimistic)} – ${formatHours(result.effort.pessimistic + result.effort.contingencyHours)}</span></div>`;
+    ${p80 ? `<div class="stat"><span class="stat-label">Fin (P80)</span><span class="stat-value">${formatDate(p80.endDate)}</span><span class="stat-hint">${p80.workingDays} días laborales · 8 de cada 10 escenarios</span></div>` : ''}
+    <div class="stat"><span class="stat-label">Esfuerzo esperado</span><span class="stat-value">${formatHours(result.effort.totalExpected)}</span><span class="stat-hint">entre ${formatHours(result.effort.optimistic)} y ${formatHours(result.effort.pessimistic + result.effort.contingencyHours)}</span></div>`;
 }
 
 function warningsHtml(result) {
   if (!result.warnings.length) return '';
-  return `<ul class="warnings">${result.warnings
+  return `<h2 class="section-title warnings-title">Para revisar</h2><ul class="warnings">${result.warnings
     .map((warning) => `<li>${escapeHtml(warning)}${isDoubleCountWarning(warning) ? ' <button type="button" class="button link" data-action="acknowledge-meetings">Son reuniones distintas, no avisar más</button>' : ''}</li>`)
     .join('')}</ul>`;
+}
+
+/** Vista previa del resumen: lo que lee producto a la vista y el detalle de cálculo plegado. */
+function sharePreviewHtml(markdown) {
+  const [summary, technical] = markdown.split(TECHNICAL_DETAIL_HEADING);
+  return `${markdownToHtml(summary)}${technical ? `<details class="fold"><summary>Detalle técnico</summary>${markdownToHtml(technical)}</details>` : ''}`;
 }
 
 /** Completa las zonas calculadas de la pestaña activa sin tocar los controles. */
 export function renderEstimateResults(result, context) {
   const { estimate, team, ui } = context;
-  const p80 = result.simulation?.percentiles.find((row) => row.percentile === 80);
+  const p80 = result.simulation?.percentiles.find((row) => row.percentile === CONFIDENCE_PERCENTILE);
+  const rollout = result.milestones?.[0];
+  const rolloutP80 = rollout?.percentiles.find((row) => row.percentile === CONFIDENCE_PERCENTILE);
   const headline = byId('estimate-headline');
   if (headline && estimate.status !== ESTIMATE_STATUS.DONE) {
-    const rollout = result.milestones?.[0];
-    headline.textContent = `${formatHours(result.effort.totalExpected)}${rollout ? ` · rollout ${formatDate(rollout.plannedDate)}` : ''} · fin ${formatDate(result.schedule.endDate)}${p80 ? ` (P80 ${formatDate(p80.endDate)})` : ''}`;
+    // La fecha de rollout encabeza; las horas van al final porque no son lo que se comunica.
+    const rolloutText = rollout ? `Rollout ${formatDate(rollout.plannedDate)}${rolloutP80 ? ` (P80 ${formatDate(rolloutP80.endDate)})` : ''} · ` : '';
+    headline.textContent = `${rolloutText}fin ${formatDate(result.schedule.endDate)}${p80 ? ` (P80 ${formatDate(p80.endDate)})` : ''} · ${formatHours(result.effort.totalExpected)}`;
   }
 
   if (ui.tab === TAB.ESTIMATE) {
@@ -322,18 +340,22 @@ export function renderEstimateResults(result, context) {
       startDate: result.schedule.startDate,
       endDate: result.schedule.endDate,
       calendar: { ...team.calendar, startDate: result.schedule.startDate },
+      markers: [
+        ...(p80 ? [{ date: p80.endDate, label: `P80 ${formatDate(p80.endDate)}`, kind: 'p80' }] : []),
+        { date: context.todayIso, label: 'Hoy', kind: 'today' },
+      ],
     });
     const chainNames = result.schedule.criticalChain.map((stageId) => result.stages.find((stage) => stage.id === stageId)?.name ?? 'Contingencia');
-    byId('plan-note').textContent = `${result.duration.scheduledWorkingDays} días laborales. La cadena crítica (${chainNames.join(' → ')}) define la fecha: acortar otra etapa no la adelanta.`;
+    byId('plan-note').textContent = `${result.duration.scheduledWorkingDays} días laborales. Las etapas de la cadena crítica (${chainNames.join(' → ')}) definen la fecha: acortar otra etapa no la adelanta.`;
   }
 
   if (ui.tab === TAB.UNCERTAINTY && result.simulation) {
     byId('probability-curve').innerHTML = renderProbabilityCurve(result.simulation.endDateHistogram, result.simulation.percentiles);
     byId('model-note').textContent = `${describeUncertaintyModel(result.simulation.uncertaintyModel)} No es una garantía de cumplimiento.`;
-    byId('percentiles').innerHTML = `<table class="data-table compact"><thead><tr><th>Confianza</th><th>Entrega</th><th>Días</th><th>Esfuerzo</th></tr></thead><tbody>${result.simulation.percentiles
-      .map((row) => `<tr${row.percentile === 80 ? ' class="highlight"' : ''}><td>P${row.percentile}</td><td>${formatDate(row.endDate)}</td><td>${row.workingDays}</td><td>${formatHours(row.effortHours)}</td></tr>`)
+    byId('percentiles').innerHTML = `<table class="data-table compact"><thead><tr><th>Confianza</th><th>Fin</th><th>Días</th><th>Esfuerzo</th></tr></thead><tbody>${result.simulation.percentiles
+      .map((row) => `<tr${row.percentile === CONFIDENCE_PERCENTILE ? ' class="highlight"' : ''}><td>${row.percentile} % (P${row.percentile})</td><td>${formatDate(row.endDate)}</td><td>${row.workingDays}</td><td>${formatHours(row.effortHours)}</td></tr>`)
       .join('')}</tbody></table>`;
   }
 
-  if (ui.tab === TAB.SHARE) byId('share-preview').textContent = renderMarkdownSummary(result);
+  if (ui.tab === TAB.SHARE) byId('share-preview').innerHTML = sharePreviewHtml(renderMarkdownSummary(result));
 }

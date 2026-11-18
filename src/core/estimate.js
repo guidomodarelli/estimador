@@ -227,7 +227,7 @@ function collectWarnings(project, stageEfforts, people) {
   }
   for (const risk of project.risks ?? []) {
     if (risk.includedInPessimistic) {
-      warnings.push(`El riesgo "${risk.description}" ya está contemplado en la estimación pesimista: no suma contingencia.`);
+      warnings.push(`El riesgo "${risk.description}" ya está contemplado en las horas máximas: no suma contingencia.`);
     }
   }
   return warnings;

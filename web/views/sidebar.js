@@ -33,7 +33,7 @@ export function renderSidebar(store) {
   const done = byRecent.filter((estimate) => estimate.status === ESTIMATE_STATUS.DONE);
   const isActive = (estimate) => ui.view === VIEW.ESTIMATE && ui.estimateId === estimate.id;
   return `
-    <button type="button" class="button primary new-estimate" data-action="new-estimate">+ Nueva estimación</button>
+    <button type="button" class="button primary new-estimate" data-action="new-estimate" title="Nueva estimación (Alt+N)">+ Nueva estimación</button>
     <nav class="sidebar-section" aria-label="Estimaciones abiertas">
       <h2 class="sidebar-heading">Abiertas <span>${open.length}</span></h2>
       <ul class="estimate-list">${open.map((estimate) => estimateItem(estimate, isActive(estimate))).join('') || '<li class="empty">Sin estimaciones abiertas</li>'}</ul>
@@ -46,7 +46,7 @@ export function renderSidebar(store) {
       ${NAV_ITEMS.map((item) => `<button type="button" class="nav-item${ui.view === item.view ? ' active' : ''}" data-action="open-view" data-view="${item.view}"${ui.view === item.view ? ' aria-current="page"' : ''}>${iconSvg(item.icon)}${item.label}</button>`).join('')}
     </nav>
     <div class="sidebar-footer">
-      <button type="button" class="button link" data-action="export-backup">Exportar respaldo</button>
-      <button type="button" class="button link" data-action="import-backup">Importar</button>
+      <button type="button" class="nav-item" data-action="export-backup" title="Descarga un JSON con todas las estimaciones, el equipo y el historial">${iconSvg('download')}Exportar respaldo</button>
+      <button type="button" class="nav-item" data-action="import-backup" title="Restaura un respaldo JSON (se puede deshacer)">${iconSvg('upload')}Importar respaldo</button>
     </div>`;
 }

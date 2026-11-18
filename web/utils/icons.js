@@ -8,6 +8,8 @@ const ICON_PATHS = Object.freeze({
   quarter: '<rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M5 9.5h2M9 9.5h2M5 12h2"/>',
   team: '<circle cx="6" cy="5.5" r="2.25"/><path d="M1.75 13.5c.5-2.3 2.2-3.5 4.25-3.5s3.75 1.2 4.25 3.5"/><path d="M10.5 3.6a2.1 2.1 0 010 4M12.2 10.4c1 .5 1.7 1.5 2 3.1"/>',
   history: '<path d="M2.5 8a5.5 5.5 0 105.5-5.5A5.5 5.5 0 004 4.3"/><path d="M3.6 1.8L4 4.3l2.5-.4"/><path d="M8 5v3.2l2.1 1.3"/>',
+  download: '<path d="M8 2v8M4.75 6.75L8 10l3.25-3.25"/><path d="M2.5 11.5v1.25c0 .7.55 1.25 1.25 1.25h8.5c.7 0 1.25-.55 1.25-1.25V11.5"/>',
+  upload: '<path d="M8 10.5v-8M4.75 5.75L8 2.5l3.25 3.25"/><path d="M2.5 11.5v1.25c0 .7.55 1.25 1.25 1.25h8.5c.7 0 1.25-.55 1.25-1.25V11.5"/>',
 });
 
 /** @param {keyof typeof ICON_PATHS} name */
