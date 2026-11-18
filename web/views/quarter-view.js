@@ -2,6 +2,7 @@ import { formatHours } from '../../src/core/index.js';
 import { renderQuarterLoad } from '../charts/quarter-load.js';
 import { shortDate } from '../charts/svg.js';
 import { escapeHtml } from '../utils/dom.js';
+import { pluralize } from '../utils/text.js';
 import { ESTIMATE_STATUS } from '../state/estimates.js';
 import { quarterBounds, weeklyLoad } from '../state/quarter.js';
 
@@ -20,29 +21,29 @@ export function renderQuarterView(store, todayIso, quarterOffset) {
   const verdict = !inQuarter.length
     ? 'No hay estimaciones abiertas en este trimestre.'
     : overWeeks.length
-      ? `${overWeeks.length} semana(s) con más trabajo que capacidad: la primera es la del ${shortDate(overWeeks[0].weekStart)}. Las fechas P80 de esas tareas no se sostienen en paralelo.`
+      ? `${pluralize(overWeeks.length, 'semana tiene', 'semanas tienen')} más trabajo que capacidad: la primera es la del ${shortDate(overWeeks[0].weekStart)}. Las fechas P80 de esas iniciativas no se sostienen en paralelo.`
       : 'Entra: ninguna semana supera la capacidad del equipo.';
 
   return `<header class="view-header row">
       <div><h1>Trimestre ${quarter.label}</h1><p class="muted">Horas P80 de las estimaciones abiertas contra la capacidad efectiva del equipo.</p></div>
       <div class="row-actions">
-        <button type="button" class="button" data-action="shift-quarter" data-offset="-1" aria-label="Trimestre anterior">←</button>
+        <button type="button" class="button" data-action="shift-quarter" data-offset="-1">← Anterior</button>
         <button type="button" class="button" data-action="shift-quarter" data-offset="0">Actual</button>
-        <button type="button" class="button" data-action="shift-quarter" data-offset="1" aria-label="Trimestre siguiente">→</button>
+        <button type="button" class="button" data-action="shift-quarter" data-offset="1">Siguiente →</button>
       </div>
     </header>
     <div class="stats">
-      <div class="stat"><span class="stat-label">Comprometido (P80)</span><span class="stat-value">${formatHours(demand)}</span><span class="stat-hint">${inQuarter.length} estimación(es)</span></div>
+      <div class="stat"><span class="stat-label">Comprometido (P80)</span><span class="stat-value">${formatHours(demand)}</span><span class="stat-hint">${pluralize(inQuarter.length, 'estimación', 'estimaciones')}</span></div>
       <div class="stat"><span class="stat-label">Capacidad del equipo</span><span class="stat-value">${formatHours(capacity)}</span><span class="stat-hint">horas efectivas</span></div>
-      <div class="stat${overWeeks.length ? ' alert' : ''}"><span class="stat-label">Uso</span><span class="stat-value">${capacity ? Math.round((demand / capacity) * 100) : 0} %</span><span class="stat-hint">${overWeeks.length ? `${overWeeks.length} semana(s) excedida(s)` : 'sin semanas excedidas'}</span></div>
+      <div class="stat${overWeeks.length ? ' alert' : ''}"><span class="stat-label">Uso</span><span class="stat-value">${capacity ? Math.round((demand / capacity) * 100) : 0} %</span><span class="stat-hint">${overWeeks.length ? pluralize(overWeeks.length, 'semana excedida', 'semanas excedidas') : 'sin semanas excedidas'}</span></div>
     </div>
     <p class="verdict${overWeeks.length ? ' alert' : ''}">${escapeHtml(verdict)}</p>
-    ${renderQuarterLoad(weeks)}
-    <div class="legend"><span class="legend-item">Horas comprometidas</span><span class="legend-item over">Excede la capacidad</span><span class="legend-item capacity">Capacidad</span></div>
+    <div class="chart-scroll">${renderQuarterLoad(weeks, todayIso)}</div>
+    <div class="legend"><span class="legend-item">Horas comprometidas</span><span class="legend-item over">Excede la capacidad</span><span class="legend-item capacity">Capacidad</span><span class="legend-item today">Hoy</span></div>
     ${inQuarter.length ? `<div class="table-scroll"><table class="data-table compact">
-      <thead><tr><th>Estimación</th><th>Inicio</th><th>Rollout</th><th>Fin probable</th><th>Fin P80</th><th>Horas P80</th></tr></thead>
+      <thead><tr><th>Estimación</th><th>Inicio</th><th>Rollout</th><th>Rollout (P80)</th><th>Fin (P80)</th><th>Horas (P80)</th></tr></thead>
       <tbody>${inQuarter
         .sort((left, right) => left.summary.p80Date.localeCompare(right.summary.p80Date))
-        .map((estimate) => `<tr><td><button type="button" class="button link" data-action="open-estimate" data-id="${escapeHtml(estimate.id)}">${escapeHtml(estimate.project.name || 'Sin nombre')}</button></td><td>${shortDate(estimate.summary.startDate)}</td><td>${estimate.summary.rolloutDate ? shortDate(estimate.summary.rolloutDate) : '—'}</td><td>${shortDate(estimate.summary.endDate)}</td><td>${shortDate(estimate.summary.p80Date)}</td><td>${formatHours(estimate.summary.p80Hours)}</td></tr>`)
+        .map((estimate) => `<tr><td><button type="button" class="button link" data-action="open-estimate" data-id="${escapeHtml(estimate.id)}">${escapeHtml(estimate.project.name || 'Sin nombre')}</button></td><td>${shortDate(estimate.summary.startDate)}</td><td>${estimate.summary.rolloutDate ? shortDate(estimate.summary.rolloutDate) : '—'}</td><td>${estimate.summary.rolloutP80Date ? shortDate(estimate.summary.rolloutP80Date) : '—'}</td><td>${shortDate(estimate.summary.p80Date)}</td><td>${formatHours(estimate.summary.p80Hours)}</td></tr>`)
         .join('')}</tbody></table></div>` : ''}`;
 }

@@ -1,10 +1,11 @@
 import { EstimationInputError, percentError, renderMarkdownSummary, RFC_PART_OPTIONS, templateDependencies } from '../src/core/index.js';
-import { byId, downloadFile, parseInputValue, preserveFocus, setAtPath, showToast, slugify, syncBoundInputs, uniqueId } from './utils/dom.js';
+import { byId, downloadFile, getAtPath, parseInputValue, preserveFocus, setAtPath, showToast, slugify, syncBoundInputs, uniqueId } from './utils/dom.js';
 import { loadStore, parseImportedStore, saveStore, TAB, VIEW } from './state/store.js';
 import { actualTotal, computeEstimate, createNewEstimate, ESTIMATE_STATUS, refreshSummary, regenerateStages, summarizeResult } from './state/estimates.js';
 import { renderSidebar } from './views/sidebar.js';
-import { NEW_PERSON_OPTION_VALUE, renderEstimateResults, renderEstimateView } from './views/estimate-view.js';
-import { capacityText, renderTeamView } from './views/team-view.js';
+import { CUSTOMIZED_STAGES_STATUS_HTML, NEW_PERSON_OPTION_VALUE, renderEstimateResults, renderEstimateView } from './views/estimate-view.js';
+import { pluralize } from './utils/text.js';
+import { capacityText, datePreviewHtml, renderTeamView } from './views/team-view.js';
 import { renderHistoryView } from './views/history-view.js';
 import { renderQuarterView } from './views/quarter-view.js';
 
@@ -27,6 +28,13 @@ let summaryTimer = null;
 let lastResult = null;
 /** Filas de etapa con "más opciones" abiertas: stageId → { snapshot, addingPerson }. */
 const openStageRows = new Map();
+/** Plegables que el usuario abrió o cerró a mano (`data-fold-key` → abierto): la elección sobrevive a los re-renders. */
+const foldStates = new Map();
+/**
+ * Atajos con Alt, por tecla física (`event.code`): en macOS, Option+letra produce otro carácter
+ * en `event.key`, así que la letra no sirve para reconocerlos.
+ */
+const ALT_SHORTCUT_ACTIONS = Object.freeze({ KeyN: 'new-estimate', KeyC: 'copy-summary' });
 
 const currentEstimate = () => store.estimates.find((estimate) => estimate.id === store.ui.estimateId) ?? null;
 const bindingRoot = () => ({ project: currentEstimate()?.project, team: store.team, actuals: currentEstimate()?.actuals });
@@ -51,7 +59,7 @@ function renderMain() {
     return renderMain();
   }
   preserveFocus(() => {
-    if (view === VIEW.ESTIMATE) main.innerHTML = renderEstimateView({ estimate: currentEstimate(), team: store.team, history: store.history, ui: store.ui, openStageRows });
+    if (view === VIEW.ESTIMATE) main.innerHTML = renderEstimateView({ estimate: currentEstimate(), team: store.team, history: store.history, ui: store.ui, openStageRows, foldStates });
     if (view === VIEW.TEAM) main.innerHTML = renderTeamView(store, focusPersonId);
     if (view === VIEW.HISTORY) main.innerHTML = renderHistoryView(store);
     if (view === VIEW.QUARTER) {
@@ -83,7 +91,7 @@ function recompute() {
     estimate.summary = summarizeResult(result);
     showError(null);
     byId('main').classList.remove('stale');
-    renderEstimateResults(result, { estimate, team: store.team, ui: store.ui });
+    renderEstimateResults(result, { estimate, team: store.team, ui: store.ui, todayIso });
     lastResult = result;
   } catch (computeError) {
     if (!(computeError instanceof EstimationInputError)) console.error('app:recompute failed', computeError);
@@ -125,7 +133,7 @@ function markStagesCustomized() {
   if (!quick || quick.customized) return;
   quick.customized = true;
   const status = byId('quick-status');
-  if (status) status.innerHTML = 'Editaste las etapas a mano: las respuestas ya no las regeneran. <button type="button" class="button link" data-action="regenerate-stages">Regenerar</button>';
+  if (status) status.innerHTML = CUSTOMIZED_STAGES_STATUS_HTML;
 }
 
 /** Regenera las etapas tras cambiar una respuesta; devuelve false si la respuesta no es válida. */
@@ -149,6 +157,13 @@ function applyBoundChange(input, value) {
     for (const [index, person] of store.team.people.entries()) {
       const cell = byId(`person-capacity-${index}`);
       if (cell) cell.innerHTML = capacityText(person);
+    }
+    const preview = document.querySelector(`[data-date-preview="${CSS.escape(path)}"]`);
+    if (preview) {
+      preview.outerHTML = datePreviewHtml(path, getAtPath(bindingRoot(), path));
+      const hasInvalidDates = document.querySelector(`[data-date-preview="${CSS.escape(path)}"]`).classList.contains('invalid');
+      if (hasInvalidDates) input.setAttribute('aria-invalid', 'true');
+      else input.removeAttribute('aria-invalid');
     }
     scheduleSummaryRefresh();
   }
@@ -492,8 +507,26 @@ document.addEventListener('click', async (event) => {
   render();
 });
 
+// Se escucha el clic en el `summary` (también lo dispara el teclado) y no el evento `toggle`,
+// que el navegador también emite al renderizar un `<details open>` y no distingue la elección del usuario.
+document.addEventListener('click', (event) => {
+  const summary = event.target.closest?.('summary');
+  const details = summary?.parentElement;
+  if (!details?.dataset.foldKey || details.querySelector(':scope > summary') !== summary) return;
+  foldStates.set(details.dataset.foldKey, !details.open);
+});
+
 document.addEventListener('keydown', (event) => {
   const target = event.target;
+  const shortcutAction = event.altKey && !event.ctrlKey && !event.metaKey ? ALT_SHORTCUT_ACTIONS[event.code] : null;
+  if (shortcutAction) {
+    const trigger = document.querySelector(`button[data-action="${shortcutAction}"]`);
+    if (trigger) {
+      event.preventDefault();
+      trigger.click();
+      return;
+    }
+  }
   if (target.dataset?.newPersonIndex !== undefined) {
     const actionName = { Enter: 'confirm-new-person', Escape: 'cancel-new-person' }[event.key];
     if (!actionName) return;
@@ -512,7 +545,7 @@ async function importBackupFile(file) {
   if (!file) return;
   try {
     const imported = parseImportedStore(JSON.parse(await file.text()));
-    runUndoable(`Importado "${file.name}": ${imported.estimates.length} estimación(es)`, () => {
+    runUndoable(`Importado "${file.name}": ${pluralize(imported.estimates.length, 'estimación', 'estimaciones')}`, () => {
       store = imported;
     });
   } catch (importError) {

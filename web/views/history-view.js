@@ -1,6 +1,7 @@
-import { BACKTEST_ACCEPTANCE, COMPLEXITY_LABELS, COMPLEXITY_OPTIONS, formatDays, formatHours, MIN_BACKTEST_RECORDS, runBacktest, UNCERTAINTY_MODEL } from '../../src/core/index.js';
+import { BACKTEST_ACCEPTANCE, COMPLEXITY_LABELS, COMPLEXITY_OPTIONS, formatDays, formatHours, MIN_BACKTEST_RECORDS, MIN_REFERENCE_CLASS_SAMPLES, runBacktest, UNCERTAINTY_MODEL } from '../../src/core/index.js';
 import { renderAccuracyScatter } from '../charts/accuracy-scatter.js';
 import { escapeHtml } from '../utils/dom.js';
+import { pluralize } from '../utils/text.js';
 import { actualTotal, calibrationFor, ESTIMATE_STATUS, MIN_CALIBRATION_SAMPLES } from '../state/estimates.js';
 
 const BACKTEST_RUNS = 400;
@@ -54,11 +55,12 @@ export function renderHistoryView(store) {
             <p class="note">Sobre la diagonal: llevó más de lo estimado.</p></section>
           <section><h2 class="section-title">Por complejidad</h2>
             <table class="data-table compact"><thead><tr><th>Complejidad</th><th>Iniciativas</th><th>Real / estimado</th><th>Subestimadas</th></tr></thead>
-            <tbody>${calibrationRows.map(({ complexity, calibration, count }) => `<tr><td>${COMPLEXITY_LABELS[complexity]}</td><td>${count}</td><td>${calibration ? `×${formatDays(calibration.medianRatio)}` : `faltan datos (${MIN_CALIBRATION_SAMPLES} etapas)`}</td><td>${calibration ? share(calibration.underestimatedShare) : '—'}</td></tr>`).join('')}</tbody></table>
+            <tbody>${calibrationRows.map(({ complexity, calibration, count }) => `<tr><td>${COMPLEXITY_LABELS[complexity]}</td><td>${count}</td><td>${calibration ? `×${formatDays(calibration.medianRatio)}` : `faltan datos (se necesitan ${pluralize(MIN_CALIBRATION_SAMPLES, 'etapa', 'etapas')})`}</td><td>${calibration ? share(calibration.underestimatedShare) : '—'}</td></tr>`).join('')}</tbody></table>
             <h2 class="section-title">¿Los rangos aciertan?</h2>${backtestHtml(store)}
           </section>
         </div>`
-      : '<p class="empty-state">Todavía no hay tareas terminadas. Cuando termines una, abrila y cargá las horas reales en "Terminé la tarea".</p>'}
+      : `<div class="empty-state"><p>Todavía no hay iniciativas terminadas, así que los rangos salen de valores por defecto.</p>
+          <p>Con ${MIN_REFERENCE_CLASS_SAMPLES} terminadas de una misma complejidad, el rango de las próximas sale de tu historial. Para cargar una, abrila y completá "Terminé la iniciativa".</p></div>`}
     ${doneEstimates.length ? `<section class="view-section"><h2 class="section-title">Terminadas</h2>
       <table class="data-table compact"><thead><tr><th>Tarea</th><th>Estimado</th><th>Real</th><th>Desvío</th></tr></thead><tbody>${doneEstimates
         .map((estimate) => {

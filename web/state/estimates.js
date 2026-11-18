@@ -90,8 +90,12 @@ export function regenerateStages(estimate, history) {
 export function projectForCore(estimate, team) {
   const { project } = estimate;
   const generated = project.quick?.customized ? [] : project.generatedAssumptions ?? [];
+  // La complejidad elegida manda aunque las etapas estén editadas a mano: el resumen tiene que decir lo mismo que la pantalla.
+  const complexity = project.quick?.complexity ?? project.complexity;
   return {
     ...project,
+    complexity,
+    factors: { ...project.factors, complexity },
     people: team.people,
     calendar: team.calendar,
     assumptions: [...(project.assumptions ?? []), ...generated],

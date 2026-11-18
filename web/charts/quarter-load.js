@@ -1,16 +1,18 @@
-import { linearScale, niceTicks, shortDate } from './svg.js';
+import { dayIndex, linearScale, niceTicks, shortDate } from './svg.js';
 
 const WIDTH = 640;
 const HEIGHT = 240;
 const PADDING = Object.freeze({ top: 16, right: 12, bottom: 36, left: 46 });
 const BAR_GAP_RATIO = 0.25;
+const DAYS_PER_WEEK = 7;
 
 /**
  * Demanda semanal (horas P80 comprometidas) contra la capacidad efectiva del equipo.
  * Las semanas por encima de la capacidad se marcan: ahí el trimestre no entra.
  * @param {Array<{weekStart: string, demandHours: number, capacityHours: number}>} weeks
+ * @param {string} [todayIso] Si cae dentro del trimestre, se marca con una línea vertical.
  */
-export function renderQuarterLoad(weeks) {
+export function renderQuarterLoad(weeks, todayIso) {
   if (!weeks.length) return '';
   const maxValue = Math.max(...weeks.flatMap((week) => [week.demandHours, week.capacityHours]), 1);
   const ticks = niceTicks(maxValue);
@@ -36,10 +38,17 @@ export function renderQuarterLoad(weeks) {
     .map((week, index) => (index % labelEvery === 0 ? `<text class="axis-label" x="${slotX(index) + slotWidth / 2}" y="${HEIGHT - 12}" text-anchor="middle">${shortDate(week.weekStart)}</text>` : ''))
     .join('');
 
+  const firstWeek = weeks[0].weekStart;
+  const todayOffsetWeeks = todayIso ? dayIndex(todayIso, firstWeek) / DAYS_PER_WEEK : -1;
+  const todayMarker = todayOffsetWeeks >= 0 && todayOffsetWeeks < weeks.length
+    ? `<g class="today-marker"><line x1="${slotX(0) + todayOffsetWeeks * slotWidth}" x2="${slotX(0) + todayOffsetWeeks * slotWidth}" y1="${PADDING.top}" y2="${HEIGHT - PADDING.bottom}"></line><text x="${slotX(0) + todayOffsetWeeks * slotWidth + 4}" y="${PADDING.top + 10}">Hoy</text></g>`
+    : '';
+
   return `<svg class="chart quarter-load" viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-labelledby="quarter-title">
     <title id="quarter-title">Horas comprometidas por semana contra la capacidad del equipo</title>
     ${grid}${bars}
     <path class="capacity-line" d="${capacityPath}"></path>
     ${xLabels}
+    ${todayMarker}
   </svg>`;
 }

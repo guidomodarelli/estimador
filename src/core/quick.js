@@ -13,6 +13,7 @@ import {
   TESTING_SHARE_OF_DEVELOPMENT,
 } from './constants/quick.js';
 import { STAGE_ID } from './constants/stages.js';
+import { formatDays } from './summary.js';
 import { COMPLEXITY_LABELS, RFC_PART_LABELS, STAGE_DEFINITIONS } from './templates.js';
 import { EstimationInputError } from './errors.js';
 
@@ -28,7 +29,8 @@ import { EstimationInputError } from './errors.js';
 
 const roundHours = (hours) => Math.round(hours / QUICK_HOURS_ROUNDING_STEP) * QUICK_HOURS_ROUNDING_STEP;
 const sumThreePoints = (threePoints) => threePoints.reduce((total, values) => total.map((sum, index) => sum + values[index]), [0, 0, 0]);
-const formatHoursList = (threePoint) => threePoint.map((hours) => `${hours}`).join(' / ');
+const formatHoursList = (threePoint) => threePoint.map(formatDays).join(' / ');
+const workingDaysText = (days) => `${days} ${days === 1 ? 'día laboral' : 'días laborales'}`;
 
 /** Completa las respuestas faltantes con los valores por defecto. */
 export function withDefaultAnswers(answers = {}) {
@@ -76,14 +78,14 @@ function stagePlan(answers, developmentHours) {
       waitDays: rfcWait,
       included: answers.rfcParts.length > 0,
       explanation: answers.rfcParts.length
-        ? `RFC con ${rfcPartNames}: ${formatHoursList(rfcHours)} h${rfcWait ? `, más ${rfcWait} día(s) laborales de revisión y aprobación` : ''}.`
+        ? `RFC con ${rfcPartNames}: ${formatHoursList(rfcHours)} h${rfcWait ? `, más ${workingDaysText(rfcWait)} de revisión y aprobación` : ''}.`
         : 'Sin RFC: la iniciativa arranca directo en desarrollo.',
     },
     [STAGE_ID.DEVELOPMENT]: {
       threePoint: [developmentHours * range.optimistic, developmentHours, developmentHours * range.pessimistic],
       waitDays: 0,
       included: true,
-      explanation: `Desarrollo: ${developmentHours} h más probables; complejidad ${label} → pesimista ×${range.pessimistic}.`,
+      explanation: `Desarrollo: ${developmentHours} h más probables; con complejidad ${label}, el máximo es ${formatDays(range.pessimistic)} veces eso.`,
     },
     [STAGE_ID.TESTING]: {
       threePoint: testingShare.map((share) => developmentHours * share),
@@ -95,7 +97,7 @@ function stagePlan(answers, developmentHours) {
       threePoint: ROLLOUT_HOURS[complexity],
       waitDays: monitoringWait,
       included: true,
-      explanation: `Rollout: ${formatHoursList(ROLLOUT_HOURS[complexity])} h y ${monitoringWait} día(s) laborales de seguimiento de métricas antes de la evidencia.`,
+      explanation: `Rollout: ${formatHoursList(ROLLOUT_HOURS[complexity])} h y ${workingDaysText(monitoringWait)} de seguimiento de métricas antes de la evidencia.`,
     },
     [STAGE_ID.EVIDENCE]: {
       threePoint: EVIDENCE_HOURS[complexity],
@@ -139,7 +141,7 @@ export function buildStagesFromAnswers(rawAnswers = {}) {
     `Complejidad ${COMPLEXITY_LABELS[answers.complexity].toLowerCase()}${answers.developmentHours ? '' : ` (desarrollo sugerido: ${developmentHours} h)`}.`,
     ...STAGE_DEFINITIONS.map((definition) => plan[definition.id].explanation),
   ];
-  if (calibrationRatio !== 1) explanations.push(`Calibración histórica aplicada: ×${calibrationRatio.toFixed(2)} sobre todas las etapas.`);
+  if (calibrationRatio !== 1) explanations.push(`Calibración histórica aplicada: ×${formatDays(calibrationRatio)} sobre todas las etapas.`);
 
   return { stages, explanations, factors: { complexity: answers.complexity } };
 }

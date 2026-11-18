@@ -48,6 +48,7 @@ export function computeEffectiveCapacity(person) {
 
   return {
     personId: person.id,
+    personName: person.name?.trim() || person.id,
     workdayHours,
     externalDeductions,
     excludedTaskDeductions,

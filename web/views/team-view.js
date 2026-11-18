@@ -1,6 +1,13 @@
 import { computeEffectiveCapacity, formatHours } from '../../src/core/index.js';
 import { escapeHtml, optionsHtml } from '../utils/dom.js';
 import { iconSvg } from '../utils/icons.js';
+import { describeDateList } from '../utils/date-list.js';
+
+/** Texto de ayuda que acompaña a un campo de fechas: muestra cómo se interpretó lo escrito. */
+export function datePreviewHtml(bindPath, values) {
+  const { text, invalid } = describeDateList(values);
+  return `<small class="date-preview${invalid.length ? ' invalid' : ''}" data-date-preview="${escapeHtml(bindPath)}">${escapeHtml(text)}</small>`;
+}
 
 const DEDUCTION_SCOPE_OPTIONS = Object.freeze([
   { value: 'external', label: 'Ajena a las tareas (se descuenta)' },
@@ -36,7 +43,7 @@ function deductionsHtml(person, personIndex) {
     })
     .join('');
   return `<table class="data-table compact">
-    <thead><tr><th>Descuento diario</th><th>h/día</th><th>Tratamiento</th><th>Tipo</th><th><span class="sr-only">Eliminar</span></th></tr></thead>
+    <thead><tr><th>Descuento diario</th><th>Horas por día</th><th>Tratamiento</th><th>Tipo</th><th><span class="sr-only">Eliminar</span></th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
   <button type="button" class="button" data-action="add-deduction" data-person-index="${personIndex}">+ Descuento</button>`;
@@ -54,7 +61,7 @@ export function renderTeamView(store, focusPersonId) {
           <td><input type="number" min="0" step="0.5" class="cell-number" aria-label="Jornada (h)" data-bind="${path}.workdayHours" data-type="number"></td>
           <td><input type="number" min="0" step="0.25" class="cell-number" aria-label="Reserva para imprevistos (h)" data-bind="${path}.reserveHours" data-type="number"></td>
           <td><input type="number" min="0" step="0.25" class="cell-number" placeholder="Auto" aria-label="Capacidad manual (h), vacío para calcular" data-bind="${path}.manualEffectiveHours" data-type="optional-number"></td>
-          <td><input type="text" class="cell-text" placeholder="2026-12-24, 2026-12-31" aria-label="Ausencias (fechas separadas por coma)" data-bind="${path}.absences" data-type="list"></td>
+          <td><input type="text" class="cell-text" placeholder="2026-12-24, 2026-12-31" aria-label="Ausencias (fechas AAAA-MM-DD separadas por coma)" data-bind="${path}.absences" data-type="list">${datePreviewHtml(`${path}.absences`, person.absences)}</td>
           <td class="computed" id="person-capacity-${index}">${capacityText(person)}</td>
           <td>${team.people.length > 1 ? `<button type="button" class="button icon" data-action="remove-person" data-index="${index}" aria-label="Eliminar ${escapeHtml(person.name)}">${iconSvg('close')}</button>` : ''}</td>
         </tr>
@@ -64,13 +71,14 @@ export function renderTeamView(store, focusPersonId) {
     .join('');
   return `<header class="view-header"><h1>Equipo y capacidad</h1><p class="muted">Vale para todas las estimaciones. Descontá solo lo ajeno a las tareas.</p></header>
     <div class="table-scroll"><table class="data-table team-table">
-      <thead><tr><th>Persona</th><th>Jornada h</th><th>Reserva h</th><th>Manual h</th><th>Ausencias</th><th>Capacidad efectiva</th><th><span class="sr-only">Eliminar</span></th></tr></thead>
+      <thead><tr><th>Persona</th><th>Jornada (h)</th><th title="Horas por día que se reservan para imprevistos">Reserva (h)</th><th title="Si la completás, reemplaza el cálculo">Capacidad fija (h)</th><th>Ausencias</th><th>Capacidad efectiva</th><th><span class="sr-only">Eliminar</span></th></tr></thead>
       ${rows}
     </table></div>
     <div class="row-actions"><button type="button" class="button" data-action="add-person">+ Persona</button></div>
     <section class="view-section">
       <h2 class="section-title">Calendario</h2>
-      <label class="block">Feriados<input type="text" placeholder="2026-12-25, 2027-01-01" data-bind="team.calendar.holidays" data-type="list"></label>
+      <label class="block">Feriados <small>(AAAA-MM-DD, separados por coma)</small><input type="text" placeholder="2026-12-25, 2027-01-01" data-bind="team.calendar.holidays" data-type="list"></label>
+      ${datePreviewHtml('team.calendar.holidays', team.calendar.holidays)}
       <label class="inline-check"><input type="checkbox" data-bind="team.meetingsReviewed"> Las reuniones que descuento son ajenas a las tareas (no avisar de doble conteo con la etapa de coordinación)</label>
     </section>`;
 }
