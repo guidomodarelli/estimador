@@ -3,14 +3,15 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import {
   buildEstimate,
+  COMPLEXITY_LABELS,
   createSampleProject,
-  createStagesFromTemplate,
+  DEFAULT_COMPLEXITY,
   EstimationInputError,
   formatDate,
   formatHours,
   renderMarkdownSummary,
-  TASK_TYPE,
-  TEMPLATE_LABELS,
+  resolveDevelopmentHours,
+  RFC_PART_OPTIONS,
   buildStagesFromAnswers,
   runBacktest,
   BACKTEST_ACCEPTANCE,
@@ -25,12 +26,14 @@ const DEFAULT_PROJECT_FILE = 'estimacion.json';
 const DEFAULT_CLI_RUNS = '2000';
 /** Prefijo de los códigos de error de node:util parseArgs (opción desconocida, valor ambiguo, etc.). */
 const PARSE_ARGS_ERROR_PREFIX = 'ERR_PARSE_ARGS';
+/** Valor de --rfc para estimar sin RFC. */
+const NO_RFC_OPTION = 'ninguno';
 
 const HELP_TEXT = `estimador — estimaciones de desarrollo con PERT, capacidad efectiva y Monte Carlo
 
 Uso:
-  estimador quick <horas> [--type T] [--clarity C] [--complexity X] [--experience E] [--deps D] [--team equipo.json] [--save archivo.json]
-  estimador init [--template feature|bug|refactor|spike] [--start YYYY-MM-DD] [--output archivo.json]
+  estimador quick [horas] [--complexity baja|media|alta] [--rfc partes] [--team equipo.json] [--save archivo.json]
+  estimador init [--complexity baja|media|alta] [--rfc partes] [--start YYYY-MM-DD] [--output archivo.json]
   estimador <proyecto.json> [--format text|md|json] [--runs N] [--seed N]
   estimador backtest <tareas.json> [--format text|json] [--runs N] [--sigma X]
 
@@ -38,19 +41,17 @@ Backtest: reestima tareas ya terminadas (respuestas del día de inicio + horas r
 mide si P50/P80/P90 aciertan en la proporción que prometen. Ver data/backtest-plantilla.json.
       --sigma       Desvío del factor común a evaluar (default: el del modelo)
 
-Estimación rápida (quick): <horas> son las horas de programación más probables
-(de investigación en un spike); el resto de las etapas se genera solo.
-      --type        bug | feature | refactor | spike (default: feature)
-      --clarity     definidos | parcial | ambiguos (default: definidos)
-      --complexity  baja | media | alta (default: baja)
-      --experience  sí | parcial | no (default: sí)
-      --deps        ninguna | pocas | múltiples (default: ninguna)
+Estimación rápida (quick): una iniciativa típica es RFC → Desarrollo → Pruebas →
+Rollout → Demo o evidencia compartible. La complejidad define los tiempos de cada etapa;
+[horas] son las horas de desarrollo más probables (si se omiten, se usan las sugeridas).
+      --complexity  baja | media | alta (default: ${DEFAULT_COMPLEXITY})
+      --rfc         Partes del RFC separadas por coma: ${RFC_PART_OPTIONS.join(', ')}
+                    (default: todas; "${NO_RFC_OPTION}" = sin RFC)
       --team        Proyecto JSON del que se toman equipo, capacidad y feriados
       --save        Guarda el proyecto generado para ajustarlo después
       --name        Nombre de la tarea
 
 Opciones:
-  -t, --template   Plantilla para init (default: feature)
   -s, --start      Fecha de inicio para init (default: hoy)
   -o, --output     Archivo a generar con init (default: ${DEFAULT_PROJECT_FILE})
   -f, --format     Salida: text (default), md (resumen para compartir) o json
@@ -61,18 +62,20 @@ Opciones:
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
+/** Partes del RFC pedidas con --rfc (undefined = todas). */
+function parseRfcParts(rfcOption) {
+  if (rfcOption === undefined) return undefined;
+  if (rfcOption.trim() === NO_RFC_OPTION) return [];
+  return rfcOption.split(',').map((part) => part.trim()).filter(Boolean);
+}
+
 async function runInit(values, ui) {
-  const template = values.template ?? TASK_TYPE.FEATURE;
-  if (!Object.values(TASK_TYPE).includes(template)) {
-    throw new UsageError(`plantilla desconocida "${template}". Opciones: ${Object.values(TASK_TYPE).join(', ')}`);
-  }
-  const project = createSampleProject(values.start ?? todayIso());
-  project.name = TEMPLATE_LABELS[template];
-  project.taskType = template;
-  project.stages = createStagesFromTemplate(template);
+  const complexity = values.complexity ?? DEFAULT_COMPLEXITY;
+  const project = createSampleProject(values.start ?? todayIso(), { complexity, rfcParts: parseRfcParts(values.rfc) });
+  project.name = `Iniciativa de complejidad ${COMPLEXITY_LABELS[complexity].toLowerCase()}`;
   const outputPath = values.output ?? DEFAULT_PROJECT_FILE;
   await writeFile(outputPath, `${JSON.stringify(project, null, 2)}\n`, 'utf8');
-  ui.banner('estimador init', TEMPLATE_LABELS[template]);
+  ui.banner('estimador init', project.name);
   ui.status('done', `Proyecto creado en ${outputPath}`);
   ui.write();
   ui.box('Próximos pasos', [`1. Editá ${outputPath} (horas O/M/P, equipo, riesgos)`, `2. estimador ${outputPath}`, `3. estimador ${outputPath} --format md > resumen.md`]);
@@ -88,29 +91,23 @@ async function readProjectFile(projectPath) {
 
 /** Arma un proyecto completo desde las respuestas rápidas; equipo y calendario salen de --team o del ejemplo. */
 async function buildQuickProject(values, hoursArgument) {
-  const anchorHours = Number(hoursArgument);
-  if (hoursArgument === undefined || !(anchorHours > 0)) {
-    throw new UsageError(`quick necesita las horas de programación como número > 0 (recibido "${hoursArgument ?? ''}")`);
+  const developmentHours = hoursArgument === undefined ? null : Number(hoursArgument);
+  if (developmentHours !== null && !(developmentHours > 0)) {
+    throw new UsageError(`quick: las horas de desarrollo deben ser un número > 0 (recibido "${hoursArgument}")`);
   }
-  const taskType = values.type ?? TASK_TYPE.FEATURE;
-  const generated = buildStagesFromAnswers({
-    taskType,
-    anchorHours,
-    requirementsClarity: values.clarity,
-    complexity: values.complexity,
-    priorExperience: values.experience,
-    externalDependencies: values.deps,
-  });
+  const answers = { complexity: values.complexity ?? DEFAULT_COMPLEXITY, developmentHours, rfcParts: parseRfcParts(values.rfc) };
+  const generated = buildStagesFromAnswers(answers);
   const base = values.team ? await readProjectFile(values.team) : createSampleProject(values.start ?? todayIso());
   return {
     ...base,
-    name: values.name ?? `${TEMPLATE_LABELS[taskType]} (${anchorHours} h de programación)`,
-    taskType,
+    name: values.name ?? `Iniciativa de complejidad ${COMPLEXITY_LABELS[answers.complexity].toLowerCase()} (${resolveDevelopmentHours(answers)} h de desarrollo)`,
+    complexity: answers.complexity,
     startDate: values.start ?? (values.team ? base.startDate : todayIso()),
     stages: generated.stages,
     factors: generated.factors,
     risks: values.team ? base.risks ?? [] : [],
     assumptions: [...(values.team ? base.assumptions ?? [] : []), ...generated.explanations],
+    externalDependencies: values.team ? base.externalDependencies ?? [] : [],
   };
 }
 
@@ -177,6 +174,7 @@ function renderText(estimate, ui) {
   ui.step(3, 4, 'Planificación con dependencias');
   ui.status('done', `${estimate.duration.scheduledWorkingDays} días laborales → ${formatDate(estimate.schedule.endDate)}`);
   ui.status('changed', `Cadena crítica: ${estimate.schedule.criticalChain.join(' → ')}`);
+  for (const milestone of estimate.milestones) ui.status('done', `Fecha de ${milestone.name.toLowerCase()}: ${formatDate(milestone.plannedDate)}`);
   ui.write();
 
   ui.step(4, 4, 'Rango probabilístico');
@@ -198,6 +196,10 @@ function renderText(estimate, ui) {
     `Esfuerzo esperado:   ${formatHours(estimate.effort.totalExpected)} (rango ${formatHours(estimate.effort.optimistic)} – ${formatHours(estimate.effort.pessimistic + estimate.effort.contingencyHours)})`,
     `Capacidad usada:     ${formatHours(estimate.capacity.teamDailyCapacity)}/día (equipo)`,
     `Duración planificada: ${estimate.duration.scheduledWorkingDays} días laborales`,
+    ...estimate.milestones.map((milestone) => {
+      const milestoneP80 = milestone.percentiles.find((row) => row.percentile === 80);
+      return `Fecha de ${milestone.name.toLowerCase()}:    ${formatDate(milestone.plannedDate)}${milestoneP80 ? ` (P80 ${formatDate(milestoneP80.endDate)})` : ''}`;
+    }),
     `Fecha probable:      ${formatDate(estimate.schedule.endDate)}`,
     ...(p80 ? [`Fecha P80:           ${formatDate(p80.endDate)}`] : []),
   ]);
@@ -212,17 +214,13 @@ async function main() {
     const { values, positionals } = parseArgs({
       allowPositionals: true,
       options: {
-        template: { type: 'string', short: 't' },
         start: { type: 'string', short: 's' },
         output: { type: 'string', short: 'o' },
         format: { type: 'string', short: 'f', default: OUTPUT_FORMAT.TEXT },
         runs: { type: 'string', short: 'r', default: DEFAULT_CLI_RUNS },
         seed: { type: 'string' },
-        type: { type: 'string' },
-        clarity: { type: 'string' },
         complexity: { type: 'string' },
-        experience: { type: 'string' },
-        deps: { type: 'string' },
+        rfc: { type: 'string' },
         team: { type: 'string' },
         save: { type: 'string' },
         name: { type: 'string' },

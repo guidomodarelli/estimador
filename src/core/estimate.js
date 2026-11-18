@@ -16,6 +16,9 @@ import { DEFAULT_COMMON_ERROR_SIGMA, UNCERTAINTY_MODEL } from './constants/uncer
 /** Sin historial, las etapas comparten un factor de error común (ver constants/uncertainty.js). */
 export const DEFAULT_UNCERTAINTY_MODEL = Object.freeze({ kind: UNCERTAINTY_MODEL.COMMON_FACTOR, sigma: DEFAULT_COMMON_ERROR_SIGMA });
 
+/** Etapas cuya fecha de fin se informa como hito (con su propio rango probabilístico). */
+export const MILESTONE_STAGE_KINDS = Object.freeze([STAGE_KIND.ROLLOUT]);
+
 /** Id de la actividad sintética que absorbe riesgos sin etapa asignada. */
 export const CONTINGENCY_ACTIVITY_ID = 'contingencia';
 
@@ -37,7 +40,7 @@ export const CONTINGENCY_ACTIVITY_ID = 'contingencia';
 /**
  * @typedef {Object} Project
  * @property {string} name
- * @property {string} [taskType]
+ * @property {string} [complexity] baja | media | alta.
  * @property {string} startDate
  * @property {{workingWeekdays?: number[], holidays?: string[]}} [calendar]
  * @property {import('./capacity.js').Person[]} [people]
@@ -125,15 +128,20 @@ export function buildEstimate(project, options = {}) {
     impactHours: risk.impactHours,
     targetActivityId: risk.activityId ?? CONTINGENCY_ACTIVITY_ID,
   }));
+  const milestoneStages = includedStages.filter((stage) => MILESTONE_STAGE_KINDS.includes(stage.kind));
   const simulation = runs > 0
-    ? simulateDelivery({ activities, riskEvents, people, baseCapacityByPerson, calendar, runs, seed, uncertaintyModel, includeSchedule: options.includeSchedule ?? true })
+    ? simulateDelivery({
+      activities, riskEvents, people, baseCapacityByPerson, calendar, runs, seed, uncertaintyModel,
+      includeSchedule: options.includeSchedule ?? true,
+      milestoneIds: milestoneStages.map((stage) => stage.id),
+    })
     : null;
 
   const totalExpectedWithContingency = baseEffort.expected + contingency.expectedHours;
   const workdayHoursReference = capacities[0].workdayHours;
 
   return {
-    project: { name: project.name, taskType: project.taskType ?? null, startDate: project.startDate },
+    project: { name: project.name, complexity: project.complexity ?? null, startDate: project.startDate },
     stages: stageEfforts.map(({ stage, effort }) => {
       const scheduled = plan.activities.find((entry) => entry.id === stage.id);
       return {
@@ -161,6 +169,13 @@ export function buildEstimate(project, options = {}) {
     },
     schedule: plan,
     simulation,
+    milestones: milestoneStages.map((stage) => ({
+      id: stage.id,
+      name: stage.name,
+      kind: stage.kind,
+      plannedDate: plan.activities.find((activity) => activity.id === stage.id).endDate,
+      percentiles: simulation?.milestones.find((milestone) => milestone.id === stage.id)?.percentiles ?? [],
+    })),
     risks,
     assumptions: project.assumptions ?? [],
     externalDependencies: project.externalDependencies ?? [],

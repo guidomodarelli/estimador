@@ -3,7 +3,7 @@ import { EstimationInputError } from './errors.js';
 
 /**
  * @typedef {Object} ActualRecord
- * @property {string} taskType Tipo/plantilla (bug, feature, refactor, spike).
+ * @property {string} complexity Complejidad de la iniciativa (baja, media, alta).
  * @property {string} [stageId] Etapa, si el registro es por etapa.
  * @property {number} estimatedHours
  * @property {number} actualHours
@@ -26,14 +26,14 @@ export function percentError(estimatedHours, actualHours) {
  * Resume la relación real/estimado de registros similares para calibrar estimaciones futuras.
  * Devuelve null si no hay datos suficientes.
  * @param {ActualRecord[]} records
- * @param {{taskType?: string, stageId?: string, minimumSamples?: number}} [filter]
+ * @param {{complexity?: string, stageId?: string, minimumSamples?: number}} [filter]
  */
 export function summarizeCalibration(records, filter = {}) {
   const minimumSamples = filter.minimumSamples ?? 3;
   const matching = records.filter(
     (record) =>
       record.estimatedHours > 0 &&
-      (!filter.taskType || record.taskType === filter.taskType) &&
+      (!filter.complexity || record.complexity === filter.complexity) &&
       (!filter.stageId || record.stageId === filter.stageId),
   );
   if (matching.length < minimumSamples) return null;

@@ -59,8 +59,9 @@ export function assertValidUncertaintyModel(model) {
  * @param {number} input.seed
  * @param {UncertaintyModel} [input.uncertaintyModel]
  * @param {boolean} [input.includeSchedule] false = solo esfuerzo, sin planificar fechas (backtests masivos).
+ * @param {string[]} [input.milestoneIds] Actividades cuya fecha de fin se reporta por percentil (por ejemplo, el rollout).
  */
-export function simulateDelivery({ activities, riskEvents, people, baseCapacityByPerson, calendar, runs, seed, uncertaintyModel = { kind: UNCERTAINTY_MODEL.INDEPENDENT }, includeSchedule = true }) {
+export function simulateDelivery({ activities, riskEvents, people, baseCapacityByPerson, calendar, runs, seed, uncertaintyModel = { kind: UNCERTAINTY_MODEL.INDEPENDENT }, includeSchedule = true, milestoneIds = [] }) {
   assertValidUncertaintyModel(uncertaintyModel);
   const random = createSeededRandom(seed);
   const sampleEffort = createEffortSampler(uncertaintyModel);
@@ -69,6 +70,7 @@ export function simulateDelivery({ activities, riskEvents, people, baseCapacityB
   const totalEfforts = [];
   const endDates = [];
   const workingDays = [];
+  const milestoneEndDates = new Map(milestoneIds.map((milestoneId) => [milestoneId, []]));
 
   for (let run = 0; run < runs; run += 1) {
     const runFactor = sampleRunFactor(uncertaintyModel, random);
@@ -84,6 +86,10 @@ export function simulateDelivery({ activities, riskEvents, people, baseCapacityB
     const plan = scheduleActivities({ activities: sampledActivities, people, baseCapacityByPerson, calendar });
     endDates.push(plan.endDate);
     workingDays.push(plan.workingDays);
+    for (const [milestoneId, dates] of milestoneEndDates) {
+      const milestone = plan.activities.find((activity) => activity.id === milestoneId);
+      if (milestone) dates.push(milestone.endDate);
+    }
   }
 
   totalEfforts.sort((left, right) => left - right);
@@ -103,6 +109,10 @@ export function simulateDelivery({ activities, riskEvents, people, baseCapacityB
       workingDays: includeSchedule ? percentileOf(workingDays, percentile) : null,
     })),
     endDateHistogram: includeSchedule ? buildHistogram(endDates) : [],
+    milestones: [...milestoneEndDates].filter(([, dates]) => dates.length).map(([id, dates]) => {
+      dates.sort();
+      return { id, percentiles: REPORTED_PERCENTILES.map((percentile) => ({ percentile, endDate: percentileOf(dates, percentile) })) };
+    }),
   };
 }
 

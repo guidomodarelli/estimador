@@ -1,29 +1,22 @@
 {
-  "instrucciones": "Reemplazá estos dos ejemplos por tareas reales ya terminadas (idealmente 15 a 30). En 'answers' poné lo que habrías respondido el DÍA DE INICIO, no lo que sabés ahora. En 'actualHours' va el esfuerzo real total (no la duración calendario). Correlo con: node cli/estimate.js backtest data/backtest-plantilla.json",
+  "instrucciones": "Reemplazá estos dos ejemplos por iniciativas reales ya terminadas (idealmente 15 a 30). En 'answers' poné lo que habrías respondido el DÍA DE INICIO (complejidad baja | media | alta, horas de desarrollo y, si no fueron todas, las partes del RFC en 'rfcParts'), no lo que sabés ahora. En 'actualHours' va el esfuerzo real total (no la duración calendario). Correlo con: node cli/estimate.js backtest data/backtest-plantilla.json",
   "records": [
     {
       "id": "ejemplo-1",
       "title": "EJEMPLO — reemplazar: bug en el filtro de búsqueda",
       "answers": {
-        "taskType": "bug",
-        "anchorHours": 3,
-        "requirementsClarity": "definidos",
         "complexity": "baja",
-        "priorExperience": "sí",
-        "externalDependencies": "ninguna"
+        "developmentHours": 3,
+        "rfcParts": []
       },
       "actualHours": 9
     },
     {
       "id": "ejemplo-2",
-      "title": "EJEMPLO — reemplazar: nueva pantalla de reportes",
+      "title": "EJEMPLO — reemplazar: nueva pantalla de reportes con métricas",
       "answers": {
-        "taskType": "feature",
-        "anchorHours": 16,
-        "requirementsClarity": "parcial",
         "complexity": "media",
-        "priorExperience": "parcial",
-        "externalDependencies": "pocas"
+        "developmentHours": 16
       },
       "actualHours": 52
     }

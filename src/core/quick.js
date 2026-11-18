@@ -1,96 +1,145 @@
 import {
-  ANCHOR_STAGE_BY_TASK_TYPE,
-  EXTERNAL_DEPENDENCY_WAIT_DAYS,
-  EXTERNAL_DEPENDENCY_WAIT_STAGE_ID,
-  PESSIMISTIC_WIDENING,
+  COMPLEXITY_OPTIONS,
+  DEFAULT_COMPLEXITY,
+  DEFAULT_DEVELOPMENT_HOURS,
+  DEVELOPMENT_RANGE_FACTORS,
+  EVIDENCE_HOURS,
   QUICK_HOURS_ROUNDING_STEP,
-  QUICK_OPTIONS,
+  RFC_PART_HOURS,
+  RFC_PART_OPTIONS,
+  RFC_REVIEW_WAIT_DAYS,
+  ROLLOUT_HOURS,
+  ROLLOUT_MONITORING_WAIT_DAYS,
+  TESTING_SHARE_OF_DEVELOPMENT,
 } from './constants/quick.js';
-import { createStagesFromTemplate } from './templates.js';
+import { STAGE_ID } from './constants/stages.js';
+import { COMPLEXITY_LABELS, RFC_PART_LABELS, STAGE_DEFINITIONS } from './templates.js';
 import { EstimationInputError } from './errors.js';
 
 /**
  * @typedef {Object} QuickAnswers
- * @property {string} taskType bug | feature | refactor | spike
- * @property {number} anchorHours Horas "más probables" de la etapa ancla (programación, o investigación en un spike).
- * @property {string} [requirementsClarity] definidos | parcial | ambiguos
- * @property {string} [complexity] baja | media | alta
- * @property {string} [priorExperience] sí | parcial | no
- * @property {string} [externalDependencies] ninguna | pocas | múltiples
+ * @property {string} [complexity] baja | media | alta (default: media).
+ * @property {number|null} [developmentHours] Horas más probables de desarrollo; vacío = sugerido por complejidad.
+ * @property {string[]} [rfcParts] Partes del RFC a escribir (default: todas).
  * @property {number} [calibrationRatio] Factor real/estimado del historial; 1 o vacío = sin calibrar.
  */
 
-const roundHours = (hours) => Math.round(hours / QUICK_HOURS_ROUNDING_STEP) * QUICK_HOURS_ROUNDING_STEP;
+/** @typedef {[number, number, number]} ThreePointHours Horas [optimista, más probable, pesimista]. */
 
-/** Completa respuestas faltantes con el primer valor de cada pregunta. */
-export function withDefaultAnswers(answers) {
-  const completed = { ...answers };
-  for (const [question, options] of Object.entries(QUICK_OPTIONS)) completed[question] ??= options[0];
-  return completed;
+const roundHours = (hours) => Math.round(hours / QUICK_HOURS_ROUNDING_STEP) * QUICK_HOURS_ROUNDING_STEP;
+const sumThreePoints = (threePoints) => threePoints.reduce((total, values) => total.map((sum, index) => sum + values[index]), [0, 0, 0]);
+const formatHoursList = (threePoint) => threePoint.map((hours) => `${hours}`).join(' / ');
+
+/** Completa las respuestas faltantes con los valores por defecto. */
+export function withDefaultAnswers(answers = {}) {
+  const complexity = answers.complexity ?? DEFAULT_COMPLEXITY;
+  return {
+    ...answers,
+    complexity,
+    developmentHours: answers.developmentHours > 0 ? answers.developmentHours : null,
+    rfcParts: Array.isArray(answers.rfcParts) ? answers.rfcParts : [...RFC_PART_OPTIONS],
+  };
+}
+
+/** Horas de desarrollo que se usan: las indicadas o las sugeridas para la complejidad. */
+export function resolveDevelopmentHours(answers) {
+  const completed = withDefaultAnswers(answers);
+  return completed.developmentHours ?? DEFAULT_DEVELOPMENT_HOURS[completed.complexity];
+}
+
+function assertValidAnswers(answers) {
+  if (!COMPLEXITY_OPTIONS.includes(answers.complexity)) {
+    throw new EstimationInputError(`quick:buildStagesFromAnswers failed: "complexity" debe ser ${COMPLEXITY_OPTIONS.join(' | ')} (recibido "${answers.complexity}")`);
+  }
+  const unknownParts = answers.rfcParts.filter((part) => !RFC_PART_OPTIONS.includes(part));
+  if (unknownParts.length) {
+    throw new EstimationInputError(`quick:buildStagesFromAnswers failed: partes del RFC desconocidas "${unknownParts.join(', ')}" (opciones: ${RFC_PART_OPTIONS.join(', ')})`);
+  }
 }
 
 /**
- * Genera todas las etapas a partir de cinco respuestas. Las proporciones entre etapas
- * salen de la plantilla del tipo de tarea; las respuestas solo ensanchan la P o agregan
- * espera, y cada ajuste se devuelve como explicación para el resumen.
- * @param {QuickAnswers} rawAnswers
- * @returns {{stages: ReturnType<typeof createStagesFromTemplate>, explanations: string[], factors: Record<string, string>}}
+ * Calcula la terna de horas y la espera posterior de cada etapa de la plantilla.
+ * @returns {Record<string, {threePoint: ThreePointHours, waitDays: number, included: boolean, explanation: string}>}
  */
-export function buildStagesFromAnswers(rawAnswers) {
-  const answers = withDefaultAnswers(rawAnswers);
-  const anchorStageId = ANCHOR_STAGE_BY_TASK_TYPE[answers.taskType];
-  if (!anchorStageId) {
-    throw new EstimationInputError(`quick:buildStagesFromAnswers failed: tipo de tarea desconocido "${answers.taskType}"`);
-  }
-  if (!(answers.anchorHours > 0)) {
-    throw new EstimationInputError(`quick:buildStagesFromAnswers failed: las horas de la etapa principal deben ser > 0 (recibido ${answers.anchorHours})`);
-  }
-  for (const [question, options] of Object.entries(QUICK_OPTIONS)) {
-    if (!options.includes(answers[question])) {
-      throw new EstimationInputError(`quick:buildStagesFromAnswers failed: "${question}" debe ser ${options.join(' | ')} (recibido "${answers[question]}")`);
-    }
-  }
+function stagePlan(answers, developmentHours) {
+  const { complexity } = answers;
+  const label = COMPLEXITY_LABELS[complexity].toLowerCase();
+  const rfcHours = sumThreePoints(answers.rfcParts.map((part) => RFC_PART_HOURS[part][complexity]));
+  const rfcPartNames = answers.rfcParts.map((part) => RFC_PART_LABELS[part]).join(', ');
+  const range = DEVELOPMENT_RANGE_FACTORS[complexity];
+  const testingShare = TESTING_SHARE_OF_DEVELOPMENT[complexity];
+  const rfcWait = RFC_REVIEW_WAIT_DAYS[complexity];
+  const monitoringWait = ROLLOUT_MONITORING_WAIT_DAYS[complexity];
+  return {
+    [STAGE_ID.RFC]: {
+      threePoint: rfcHours,
+      waitDays: rfcWait,
+      included: answers.rfcParts.length > 0,
+      explanation: answers.rfcParts.length
+        ? `RFC con ${rfcPartNames}: ${formatHoursList(rfcHours)} h${rfcWait ? `, más ${rfcWait} día(s) laborales de revisión y aprobación` : ''}.`
+        : 'Sin RFC: la iniciativa arranca directo en desarrollo.',
+    },
+    [STAGE_ID.DEVELOPMENT]: {
+      threePoint: [developmentHours * range.optimistic, developmentHours, developmentHours * range.pessimistic],
+      waitDays: 0,
+      included: true,
+      explanation: `Desarrollo: ${developmentHours} h más probables; complejidad ${label} → pesimista ×${range.pessimistic}.`,
+    },
+    [STAGE_ID.TESTING]: {
+      threePoint: testingShare.map((share) => developmentHours * share),
+      waitDays: 0,
+      included: true,
+      explanation: `Pruebas: ${Math.round(testingShare[1] * 100)} % del desarrollo (complejidad ${label}).`,
+    },
+    [STAGE_ID.ROLLOUT]: {
+      threePoint: ROLLOUT_HOURS[complexity],
+      waitDays: monitoringWait,
+      included: true,
+      explanation: `Rollout: ${formatHoursList(ROLLOUT_HOURS[complexity])} h y ${monitoringWait} día(s) laborales de seguimiento de métricas antes de la evidencia.`,
+    },
+    [STAGE_ID.EVIDENCE]: {
+      threePoint: EVIDENCE_HOURS[complexity],
+      waitDays: 0,
+      included: true,
+      explanation: `Demo o evidencia compartible: ${formatHoursList(EVIDENCE_HOURS[complexity])} h.`,
+    },
+  };
+}
 
-  const stages = createStagesFromTemplate(answers.taskType);
-  const anchor = stages.find((stage) => stage.id === anchorStageId);
+/**
+ * Genera las etapas de la iniciativa a partir de la complejidad, las horas de desarrollo y las
+ * partes del RFC. Cada valor aplicado se devuelve como explicación para el resumen.
+ * @param {QuickAnswers} rawAnswers
+ */
+export function buildStagesFromAnswers(rawAnswers = {}) {
+  const answers = withDefaultAnswers(rawAnswers);
+  assertValidAnswers(answers);
+  const developmentHours = resolveDevelopmentHours(answers);
   const calibrationRatio = answers.calibrationRatio > 0 ? answers.calibrationRatio : 1;
-  const scale = (answers.anchorHours / anchor.mostLikely) * calibrationRatio;
+  const plan = stagePlan(answers, developmentHours);
+
+  const stages = STAGE_DEFINITIONS.map((definition) => {
+    const { threePoint, waitDays, included } = plan[definition.id];
+    const [optimistic, mostLikely, pessimistic] = threePoint.map((hours) => hours * calibrationRatio);
+    const roundedOptimistic = roundHours(optimistic);
+    const roundedMostLikely = Math.max(roundedOptimistic, QUICK_HOURS_ROUNDING_STEP, roundHours(mostLikely));
+    return {
+      ...definition,
+      dependsOn: [...definition.dependsOn],
+      optimistic: roundedOptimistic,
+      mostLikely: roundedMostLikely,
+      pessimistic: Math.max(roundedMostLikely, roundHours(pessimistic)),
+      method: 'pert',
+      included,
+      ...(waitDays ? { waitWorkingDaysAfter: waitDays } : {}),
+    };
+  });
+
   const explanations = [
-    `Etapas proporcionales a ${answers.anchorHours} h de "${anchor.name}", según la plantilla del tipo de tarea.`,
+    `Complejidad ${COMPLEXITY_LABELS[answers.complexity].toLowerCase()}${answers.developmentHours ? '' : ` (desarrollo sugerido: ${developmentHours} h)`}.`,
+    ...STAGE_DEFINITIONS.map((definition) => plan[definition.id].explanation),
   ];
   if (calibrationRatio !== 1) explanations.push(`Calibración histórica aplicada: ×${calibrationRatio.toFixed(2)} sobre todas las etapas.`);
 
-  const wideningByStage = new Map();
-  for (const [question, rule] of Object.entries(PESSIMISTIC_WIDENING)) {
-    const widening = rule.values[answers[question]];
-    if (!widening) continue;
-    for (const stageId of rule.stageIds) wideningByStage.set(stageId, (wideningByStage.get(stageId) ?? 0) + widening);
-    explanations.push(`${rule.label} "${answers[question]}": pesimista +${Math.round(widening * 100)} % en ${rule.stageIds.length} etapas.`);
-  }
-
-  for (const stage of stages) {
-    if (!stage.included) continue;
-    const optimistic = roundHours(stage.optimistic * scale);
-    const mostLikely = Math.max(optimistic, QUICK_HOURS_ROUNDING_STEP, roundHours(stage.mostLikely * scale));
-    const widenedPessimistic = stage.pessimistic * scale * (1 + (wideningByStage.get(stage.id) ?? 0));
-    Object.assign(stage, { optimistic, mostLikely, pessimistic: Math.max(mostLikely, roundHours(widenedPessimistic)) });
-  }
-
-  const waitDays = EXTERNAL_DEPENDENCY_WAIT_DAYS[answers.externalDependencies];
-  if (waitDays > 0) {
-    const waitStage = stages.find((stage) => stage.id === EXTERNAL_DEPENDENCY_WAIT_STAGE_ID && stage.included) ?? anchor;
-    waitStage.waitWorkingDaysAfter = (waitStage.waitWorkingDaysAfter ?? 0) + waitDays;
-    explanations.push(`Dependencias externas "${answers.externalDependencies}": ${waitDays} día(s) laborales de espera después de "${waitStage.name}" (alarga la fecha, no el esfuerzo).`);
-  }
-
-  return {
-    stages,
-    explanations,
-    factors: {
-      complexity: answers.complexity,
-      requirementsClarity: answers.requirementsClarity,
-      externalDependencies: answers.externalDependencies,
-      priorExperience: answers.priorExperience,
-    },
-  };
+  return { stages, explanations, factors: { complexity: answers.complexity } };
 }

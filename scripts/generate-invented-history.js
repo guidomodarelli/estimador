@@ -19,35 +19,27 @@ const INVENTED_LOG_SIGMA = 0.4;
 const SURPRISE_PROBABILITY = 1 / 8;
 const SURPRISE_MULTIPLIER = 1.8;
 
-/** Tareas típicas de un equipo web: título, tipo y horas de programación estimadas. */
+/** Iniciativas típicas de un equipo web: título, complejidad y horas de desarrollo estimadas. */
 const INVENTED_TASKS = [
-  ['Filtro de búsqueda devuelve duplicados', 'bug', 3], ['Checkout con nuevo medio de pago', 'feature', 24],
-  ['Exportar reportes a CSV', 'feature', 8], ['Migrar formularios a la nueva librería', 'refactor', 16],
-  ['Evaluar proveedor de notificaciones push', 'spike', 6], ['Error 500 al subir imágenes grandes', 'bug', 4],
-  ['Panel de métricas para administradores', 'feature', 30], ['Separar módulo de pagos en servicios', 'refactor', 28],
-  ['Login con Google', 'feature', 12], ['Fechas mal en zona horaria de México', 'bug', 2],
-  ['Investigar lentitud del listado de pedidos', 'spike', 8], ['Carrito persistente entre dispositivos', 'feature', 18],
-  ['Reemplazar moment por date-fns', 'refactor', 10], ['Botón de reintento no responde en iOS', 'bug', 3],
-  ['Onboarding de usuarios nuevos en 3 pasos', 'feature', 20], ['Notificaciones por email de envío', 'feature', 10],
-  ['Prueba de concepto de búsqueda semántica', 'spike', 12], ['Paginación rota con filtros combinados', 'bug', 5],
-  ['Unificar manejo de errores de la API', 'refactor', 14], ['Integración con sistema de facturación', 'feature', 36],
-  ['Precio con descuento redondea mal', 'bug', 2], ['Modo oscuro en toda la app', 'feature', 16],
-  ['Tipar la capa de servicios con TypeScript', 'refactor', 22], ['Comparar librerías de gráficos', 'spike', 4],
-  ['Cupones con vencimiento y límite de uso', 'feature', 14],
+  ['Filtro de búsqueda devuelve duplicados', 'baja', 3], ['Checkout con nuevo medio de pago', 'alta', 40],
+  ['Exportar reportes a CSV', 'baja', 8], ['Migrar formularios a la nueva librería', 'media', 16],
+  ['Notificaciones push en la app', 'media', 20], ['Error 500 al subir imágenes grandes', 'baja', 4],
+  ['Panel de métricas para administradores', 'alta', 30], ['Separar módulo de pagos en servicios', 'alta', 48],
+  ['Login con Google', 'media', 12], ['Fechas mal en zona horaria de México', 'baja', 2],
+  ['Listado de pedidos más rápido', 'media', 14], ['Carrito persistente entre dispositivos', 'media', 18],
+  ['Reemplazar moment por date-fns', 'baja', 10], ['Botón de reintento no responde en iOS', 'baja', 3],
+  ['Onboarding de usuarios nuevos en 3 pasos', 'media', 20], ['Notificaciones por email de envío', 'media', 10],
+  ['Búsqueda semántica en el catálogo', 'alta', 36], ['Paginación rota con filtros combinados', 'baja', 5],
+  ['Unificar manejo de errores de la API', 'media', 14], ['Integración con sistema de facturación', 'alta', 56],
+  ['Precio con descuento redondea mal', 'baja', 2], ['Modo oscuro en toda la app', 'media', 16],
+  ['Tipar la capa de servicios con TypeScript', 'alta', 22], ['Nuevo gráfico de ventas', 'baja', 6],
+  ['Cupones con vencimiento y límite de uso', 'media', 14],
 ];
 
 const random = createSeededRandom(SEED);
-const pick = (options) => options[Math.floor(random() * options.length)];
 
-const records = INVENTED_TASKS.map(([title, taskType, anchorHours], index) => {
-  const answers = {
-    taskType,
-    anchorHours,
-    requirementsClarity: pick(['definidos', 'definidos', 'parcial', 'ambiguos']),
-    complexity: pick(['baja', 'media', 'media', 'alta']),
-    priorExperience: pick(['sí', 'sí', 'parcial', 'no']),
-    externalDependencies: pick(['ninguna', 'ninguna', 'pocas', 'múltiples']),
-  };
+const records = INVENTED_TASKS.map(([title, complexity, developmentHours], index) => {
+  const answers = { complexity, developmentHours };
   const stageSum = buildStagesFromAnswers(answers).stages
     .filter((stage) => stage.included)
     .reduce((sum, stage) => sum + sampleBetaPert(stage, random), 0);
@@ -68,4 +60,4 @@ const document = {
   records,
 };
 await writeFile(OUTPUT_PATH, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
-process.stdout.write(`Generadas ${records.length} tareas inventadas en data/backtest-inventado.json\n`);
+process.stdout.write(`Generadas ${records.length} iniciativas inventadas en data/backtest-inventado.json\n`);

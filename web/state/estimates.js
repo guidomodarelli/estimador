@@ -1,11 +1,11 @@
 import {
   buildEstimate,
   buildStagesFromAnswers,
-  createSampleProject,
   DEFAULT_UNCERTAINTY_MODEL,
+  INITIATIVE_COMPLEXITY,
   MIN_REFERENCE_CLASS_SAMPLES,
+  SAMPLE_ASSUMPTIONS,
   summarizeCalibration,
-  TASK_TYPE,
   UNCERTAINTY_MODEL,
   withDefaultAnswers,
 } from '../../src/core/index.js';
@@ -13,7 +13,8 @@ import {
 /** Lógica de dominio de las estimaciones guardadas en la app (sin DOM). */
 
 export const ESTIMATE_STATUS = Object.freeze({ DRAFT: 'draft', DONE: 'done' });
-export const DEFAULT_QUICK_ANSWERS = Object.freeze({ taskType: TASK_TYPE.FEATURE, anchorHours: 20, applyCalibration: false, customized: false });
+export const DEFAULT_QUICK_ANSWERS = Object.freeze({ complexity: INITIATIVE_COMPLEXITY.MEDIUM, developmentHours: null, applyCalibration: false, customized: false });
+export const SAMPLE_ESTIMATE_NAME = 'Iniciativa de ejemplo';
 export const MIN_CALIBRATION_SAMPLES = 3;
 const SUMMARY_SIMULATION_RUNS = 600;
 
@@ -22,37 +23,31 @@ const newId = () => `est-${Date.now().toString(36)}-${Math.random().toString(36)
 /** Envuelve un proyecto (sin equipo) en una estimación guardable. */
 export function createEstimateFromProject(project) {
   const now = new Date().toISOString();
-  const quick = project.quick ?? withDefaultAnswers({ ...DEFAULT_QUICK_ANSWERS, taskType: project.taskType ?? TASK_TYPE.FEATURE, customized: true });
+  const quick = project.quick ?? withDefaultAnswers({ ...DEFAULT_QUICK_ANSWERS, complexity: project.complexity ?? DEFAULT_QUICK_ANSWERS.complexity, customized: true });
   return { id: newId(), status: ESTIMATE_STATUS.DRAFT, createdAt: now, updatedAt: now, project: { ...project, quick }, actuals: {}, summary: null };
 }
 
 /** Estimación nueva con las respuestas por defecto y etapas generadas. */
-export function createNewEstimate(startDate, name = 'Nueva estimación') {
-  const sample = createSampleProject(startDate);
+export function createNewEstimate(startDate, name = 'Nueva iniciativa') {
   const estimate = createEstimateFromProject({
     name,
     startDate,
-    taskType: TASK_TYPE.FEATURE,
+    complexity: DEFAULT_QUICK_ANSWERS.complexity,
     stages: [],
     risks: [],
-    assumptions: [],
+    assumptions: name === SAMPLE_ESTIMATE_NAME ? [...SAMPLE_ASSUMPTIONS] : [],
     externalDependencies: [],
     factors: {},
     quick: withDefaultAnswers({ ...DEFAULT_QUICK_ANSWERS }),
   });
-  if (name === 'Nueva funcionalidad de ejemplo') {
-    estimate.project.risks = sample.risks;
-    estimate.project.assumptions = sample.assumptions;
-    estimate.project.externalDependencies = sample.externalDependencies;
-  }
   regenerateStages(estimate, []);
   return estimate;
 }
 
-/** Cocientes real/estimado por tarea terminada de un tipo (agrupando el historial por tarea). */
-export function referenceClassRatios(history, taskType) {
+/** Cocientes real/estimado por iniciativa terminada de una complejidad (agrupando el historial por iniciativa). */
+export function referenceClassRatios(history, complexity) {
   const totalsByTask = new Map();
-  for (const record of history.filter((candidate) => candidate.taskType === taskType && candidate.estimatedHours > 0)) {
+  for (const record of history.filter((candidate) => candidate.complexity === complexity && candidate.estimatedHours > 0)) {
     const key = record.estimateId ?? `${record.projectName}|${record.recordedAt}`;
     const totals = totalsByTask.get(key) ?? { estimated: 0, actual: 0 };
     totals.estimated += record.estimatedHours;
@@ -63,13 +58,13 @@ export function referenceClassRatios(history, taskType) {
   return ratios.length >= MIN_REFERENCE_CLASS_SAMPLES ? ratios : null;
 }
 
-export function calibrationFor(history, taskType) {
-  return summarizeCalibration(history, { taskType, minimumSamples: MIN_CALIBRATION_SAMPLES });
+export function calibrationFor(history, complexity) {
+  return summarizeCalibration(history, { complexity, minimumSamples: MIN_CALIBRATION_SAMPLES });
 }
 
 /** Con historial suficiente el rango sale de tareas reales; si no, factor común por defecto. */
-export function uncertaintyModelFor(history, taskType) {
-  const ratios = referenceClassRatios(history, taskType);
+export function uncertaintyModelFor(history, complexity) {
+  const ratios = referenceClassRatios(history, complexity);
   return ratios ? { kind: UNCERTAINTY_MODEL.REFERENCE_CLASS, ratios } : DEFAULT_UNCERTAINTY_MODEL;
 }
 
@@ -77,14 +72,14 @@ export function uncertaintyModelFor(history, taskType) {
 export function regenerateStages(estimate, history) {
   const { project } = estimate;
   const answers = project.quick;
-  const calibration = calibrationFor(history, answers.taskType);
-  const historyAlreadyInRange = referenceClassRatios(history, answers.taskType) !== null;
+  const calibration = calibrationFor(history, answers.complexity);
+  const historyAlreadyInRange = referenceClassRatios(history, answers.complexity) !== null;
   const result = buildStagesFromAnswers({
     ...answers,
     calibrationRatio: answers.applyCalibration && calibration && !historyAlreadyInRange ? calibration.medianRatio : 1,
   });
   project.stages = result.stages;
-  project.taskType = answers.taskType;
+  project.complexity = answers.complexity;
   project.factors = result.factors;
   project.generatedAssumptions = result.explanations;
   project.risks = (project.risks ?? []).filter((risk) => !risk.activityId || project.stages.some((stage) => stage.id === risk.activityId && stage.included));
@@ -109,7 +104,7 @@ const DOUBLE_COUNT_WARNING_PREFIX = 'Posible doble conteo';
 export function computeEstimate(estimate, team, history, runs) {
   const result = buildEstimate(projectForCore(estimate, team), {
     runs,
-    uncertaintyModel: uncertaintyModelFor(history, estimate.project.quick?.taskType ?? estimate.project.taskType),
+    uncertaintyModel: uncertaintyModelFor(history, estimate.project.quick?.complexity ?? estimate.project.complexity),
   });
   if (team.meetingsReviewed) result.warnings = result.warnings.filter((warning) => !warning.startsWith(DOUBLE_COUNT_WARNING_PREFIX));
   return result;
@@ -120,6 +115,7 @@ export const isDoubleCountWarning = (warning) => warning.startsWith(DOUBLE_COUNT
 /** Resumen liviano que se guarda con la estimación para la sidebar y el trimestre. */
 export function summarizeResult(result) {
   const percentile = (value) => result.simulation?.percentiles.find((row) => row.percentile === value);
+  const rollout = result.milestones?.[0];
   return {
     expectedHours: result.effort.totalExpected,
     startDate: result.schedule.startDate,
@@ -128,6 +124,8 @@ export function summarizeResult(result) {
     p80Date: percentile(80)?.endDate ?? result.schedule.endDate,
     p80Hours: percentile(80)?.effortHours ?? result.effort.totalExpected,
     p80WorkingDays: percentile(80)?.workingDays ?? result.duration.scheduledWorkingDays,
+    rolloutDate: rollout?.plannedDate ?? null,
+    rolloutP80Date: rollout?.percentiles.find((row) => row.percentile === 80)?.endDate ?? rollout?.plannedDate ?? null,
   };
 }
 

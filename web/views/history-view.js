@@ -1,4 +1,4 @@
-import { BACKTEST_ACCEPTANCE, formatDays, formatHours, MIN_BACKTEST_RECORDS, runBacktest, TEMPLATE_LABELS, UNCERTAINTY_MODEL } from '../../src/core/index.js';
+import { BACKTEST_ACCEPTANCE, COMPLEXITY_LABELS, COMPLEXITY_OPTIONS, formatDays, formatHours, MIN_BACKTEST_RECORDS, runBacktest, UNCERTAINTY_MODEL } from '../../src/core/index.js';
 import { renderAccuracyScatter } from '../charts/accuracy-scatter.js';
 import { escapeHtml } from '../utils/dom.js';
 import { actualTotal, calibrationFor, ESTIMATE_STATUS, MIN_CALIBRATION_SAMPLES } from '../state/estimates.js';
@@ -16,7 +16,7 @@ function taskTotals(store) {
   const totals = new Map();
   for (const record of store.history) {
     const key = record.estimateId ?? `${record.projectName}|${record.recordedAt}`;
-    const entry = totals.get(key) ?? { label: record.projectName ?? 'Tarea', taskType: record.taskType, estimatedHours: 0, actualHours: 0 };
+    const entry = totals.get(key) ?? { label: record.projectName ?? 'Iniciativa', complexity: record.complexity, estimatedHours: 0, actualHours: 0 };
     entry.estimatedHours += record.estimatedHours;
     entry.actualHours += record.actualHours;
     totals.set(key, entry);
@@ -29,7 +29,7 @@ function backtestHtml(store) {
     .filter((estimate) => estimate.status === ESTIMATE_STATUS.DONE && estimate.project.quick && actualTotal(estimate) > 0)
     .map((estimate) => ({ id: estimate.id, title: estimate.project.name, answers: estimate.project.quick, actualHours: actualTotal(estimate) }));
   if (records.length < MIN_BACKTEST_RECORDS) {
-    return `<p class="note">El chequeo de calibración necesita ${MIN_BACKTEST_RECORDS} tareas terminadas con las preguntas rápidas (hay ${records.length}). Mide si el P80 acierta 8 de cada 10 veces.</p>`;
+    return `<p class="note">El chequeo de calibración necesita ${MIN_BACKTEST_RECORDS} iniciativas terminadas con las preguntas rápidas (hay ${records.length}). Mide si el P80 acierta 8 de cada 10 veces.</p>`;
   }
   const result = runBacktest(records, { runs: BACKTEST_RUNS });
   return `<table class="data-table compact">
@@ -42,19 +42,19 @@ function backtestHtml(store) {
 /** Historial: qué tan bien venís estimando y si los rangos aciertan. */
 export function renderHistoryView(store) {
   const totals = taskTotals(store);
-  const calibrationRows = Object.keys(TEMPLATE_LABELS)
-    .map((taskType) => ({ taskType, calibration: calibrationFor(store.history, taskType), count: totals.filter((total) => total.taskType === taskType).length }))
+  const calibrationRows = COMPLEXITY_OPTIONS
+    .map((complexity) => ({ complexity, calibration: calibrationFor(store.history, complexity), count: totals.filter((total) => total.complexity === complexity).length }))
     .filter((row) => row.count > 0);
   const doneEstimates = store.estimates.filter((estimate) => estimate.status === ESTIMATE_STATUS.DONE);
 
-  return `<header class="view-header"><h1>Historial</h1><p class="muted">Cada tarea terminada mejora las próximas estimaciones del mismo tipo.</p></header>
+  return `<header class="view-header"><h1>Historial</h1><p class="muted">Cada iniciativa terminada mejora las próximas estimaciones de la misma complejidad.</p></header>
     ${totals.length
       ? `<div class="history-grid">
           <section><h2 class="section-title">Estimado contra real</h2>${renderAccuracyScatter(totals.map((total) => ({ ...total, label: total.label })))}
             <p class="note">Sobre la diagonal: llevó más de lo estimado.</p></section>
-          <section><h2 class="section-title">Por tipo de tarea</h2>
-            <table class="data-table compact"><thead><tr><th>Tipo</th><th>Tareas</th><th>Real / estimado</th><th>Subestimadas</th></tr></thead>
-            <tbody>${calibrationRows.map(({ taskType, calibration, count }) => `<tr><td>${TEMPLATE_LABELS[taskType]}</td><td>${count}</td><td>${calibration ? `×${formatDays(calibration.medianRatio)}` : `faltan datos (${MIN_CALIBRATION_SAMPLES} etapas)`}</td><td>${calibration ? share(calibration.underestimatedShare) : '—'}</td></tr>`).join('')}</tbody></table>
+          <section><h2 class="section-title">Por complejidad</h2>
+            <table class="data-table compact"><thead><tr><th>Complejidad</th><th>Iniciativas</th><th>Real / estimado</th><th>Subestimadas</th></tr></thead>
+            <tbody>${calibrationRows.map(({ complexity, calibration, count }) => `<tr><td>${COMPLEXITY_LABELS[complexity]}</td><td>${count}</td><td>${calibration ? `×${formatDays(calibration.medianRatio)}` : `faltan datos (${MIN_CALIBRATION_SAMPLES} etapas)`}</td><td>${calibration ? share(calibration.underestimatedShare) : '—'}</td></tr>`).join('')}</tbody></table>
             <h2 class="section-title">¿Los rangos aciertan?</h2>${backtestHtml(store)}
           </section>
         </div>`

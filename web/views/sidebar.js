@@ -1,22 +1,24 @@
-import { formatHours, TEMPLATE_LABELS } from '../../src/core/index.js';
+import { COMPLEXITY_LABELS, formatHours } from '../../src/core/index.js';
 import { shortDate } from '../charts/svg.js';
 import { escapeHtml } from '../utils/dom.js';
+import { iconSvg } from '../utils/icons.js';
 import { actualTotal, ESTIMATE_STATUS } from '../state/estimates.js';
 import { VIEW } from '../state/store.js';
 
 const NAV_ITEMS = Object.freeze([
-  { view: VIEW.QUARTER, icon: '▦', label: 'Trimestre' },
-  { view: VIEW.TEAM, icon: '◎', label: 'Equipo' },
-  { view: VIEW.HISTORY, icon: '◷', label: 'Historial' },
+  { view: VIEW.QUARTER, icon: 'quarter', label: 'Trimestre' },
+  { view: VIEW.TEAM, icon: 'team', label: 'Equipo' },
+  { view: VIEW.HISTORY, icon: 'history', label: 'Historial' },
 ]);
 
 function estimateItem(estimate, isActive) {
   const name = estimate.project.name?.trim() || 'Sin nombre';
-  const typeLabel = TEMPLATE_LABELS[estimate.project.taskType] ?? '';
+  const complexityLabel = COMPLEXITY_LABELS[estimate.project.complexity];
+  const typeLabel = complexityLabel ? `Complejidad ${complexityLabel.toLowerCase()}` : '';
   const detail = estimate.status === ESTIMATE_STATUS.DONE
     ? `<span class="item-detail done">Terminada · real ${formatHours(actualTotal(estimate))}</span>`
     : estimate.summary
-      ? `<span class="item-detail">P80 ${shortDate(estimate.summary.p80Date)} · ${typeLabel}</span>`
+      ? `<span class="item-detail">${estimate.summary.rolloutDate ? `Rollout ${shortDate(estimate.summary.rolloutDate)} · ` : ''}P80 ${shortDate(estimate.summary.p80Date)}</span>`
       : `<span class="item-detail">${typeLabel}</span>`;
   return `<li><button type="button" class="estimate-item${isActive ? ' active' : ''}" data-action="open-estimate" data-id="${escapeHtml(estimate.id)}"${isActive ? ' aria-current="page"' : ''}>
     <span class="item-name">${escapeHtml(name)}</span>${detail}
@@ -41,7 +43,7 @@ export function renderSidebar(store) {
       <ul class="estimate-list">${done.map((estimate) => estimateItem(estimate, isActive(estimate))).join('')}</ul></details>
     </nav>` : ''}
     <nav class="sidebar-section sidebar-nav" aria-label="Vistas del equipo">
-      ${NAV_ITEMS.map((item) => `<button type="button" class="nav-item${ui.view === item.view ? ' active' : ''}" data-action="open-view" data-view="${item.view}"${ui.view === item.view ? ' aria-current="page"' : ''}><span aria-hidden="true">${item.icon}</span>${item.label}</button>`).join('')}
+      ${NAV_ITEMS.map((item) => `<button type="button" class="nav-item${ui.view === item.view ? ' active' : ''}" data-action="open-view" data-view="${item.view}"${ui.view === item.view ? ' aria-current="page"' : ''}>${iconSvg(item.icon)}${item.label}</button>`).join('')}
     </nav>
     <div class="sidebar-footer">
       <button type="button" class="button link" data-action="export-backup">Exportar respaldo</button>

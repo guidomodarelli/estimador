@@ -9,7 +9,7 @@ import {
 import { DEFAULT_SIMULATION_SEED, REPORTED_PERCENTILES } from './constants/estimation.js';
 import { DEFAULT_COMMON_ERROR_SIGMA, MIN_REFERENCE_CLASS_SAMPLES, UNCERTAINTY_MODEL } from './constants/uncertainty.js';
 import { buildEstimate } from './estimate.js';
-import { buildStagesFromAnswers } from './quick.js';
+import { buildStagesFromAnswers, withDefaultAnswers } from './quick.js';
 import { EstimationInputError } from './errors.js';
 
 /**
@@ -24,7 +24,7 @@ import { EstimationInputError } from './errors.js';
 function projectFromRecord(record) {
   return {
     name: record.title ?? record.id,
-    taskType: record.answers.taskType,
+    complexity: withDefaultAnswers(record.answers).complexity,
     startDate: BACKTEST_REFERENCE_START_DATE,
     people: [BACKTEST_REFERENCE_PERSON],
     stages: buildStagesFromAnswers(record.answers).stages,
@@ -49,13 +49,14 @@ function assertValidRecord(record, index) {
 }
 
 /**
- * Cocientes real/esperado de las OTRAS tareas (leave-one-out), del mismo tipo si alcanzan.
+ * Cocientes real/esperado de las OTRAS tareas (leave-one-out), de la misma complejidad si alcanzan.
  * Evaluar una tarea con su propio dato inflaría la cobertura.
  */
 function leaveOneOutRatios(evaluated, currentIndex) {
   const others = evaluated.filter((_, index) => index !== currentIndex);
-  const sameType = others.filter((entry) => entry.record.answers.taskType === evaluated[currentIndex].record.answers.taskType);
-  const pool = sameType.length >= MIN_REFERENCE_CLASS_SAMPLES ? sameType : others;
+  const currentComplexity = evaluated[currentIndex].project.complexity;
+  const sameComplexity = others.filter((entry) => entry.project.complexity === currentComplexity);
+  const pool = sameComplexity.length >= MIN_REFERENCE_CLASS_SAMPLES ? sameComplexity : others;
   return pool.length >= MIN_REFERENCE_CLASS_SAMPLES ? pool.map((entry) => entry.ratio) : null;
 }
 

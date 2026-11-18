@@ -26,20 +26,16 @@ export function formatDate(isoDate) {
  */
 export function describeUncertaintyModel(model) {
   if (model?.kind === 'reference-class') {
-    return `Rango calculado con ${model.sampleCount} tareas reales terminadas del mismo tipo (cuánto se desviaron de lo estimado); con pocas tareas el rango puede quedar algo optimista en los extremos.`;
+    return `Rango calculado con ${model.sampleCount} iniciativas reales terminadas de la misma complejidad (cuánto se desviaron de lo estimado); con pocas tareas el rango puede quedar algo optimista en los extremos.`;
   }
   if (model?.kind === 'common-factor') {
-    return `Rango con un error común a todas las etapas (σ ${model.sigma}), porque cuando una tarea se subestima suelen fallar todas sus etapas a la vez. Ese valor es un punto de partida: con 5 tareas terminadas del mismo tipo se reemplaza por tu historial.`;
+    return `Rango con un error común a todas las etapas (σ ${model.sigma}), porque cuando una tarea se subestima suelen fallar todas sus etapas a la vez. Ese valor es un punto de partida: con 5 iniciativas terminadas de la misma complejidad se reemplaza por tu historial.`;
   }
   return 'Rango con etapas que varían de forma independiente (Beta-PERT); tiende a quedar angosto si los errores están correlacionados.';
 }
 
 const FACTOR_LABELS = Object.freeze({
-  complexity: 'Complejidad técnica',
-  requirementsClarity: 'Claridad de requerimientos',
-  externalDependencies: 'Dependencias externas',
-  priorExperience: 'Experiencia previa',
-  reworkRisk: 'Riesgo de retrabajo',
+  complexity: 'Complejidad de la iniciativa',
 });
 
 /**
@@ -51,6 +47,10 @@ export function renderMarkdownSummary(estimate) {
   const { effort, capacity, duration, schedule, simulation } = estimate;
   lines.push(`# Estimación: ${estimate.project.name}`, '');
   lines.push(`Inicio: **${formatDate(schedule.startDate)}** · Fecha probable (plan con esfuerzo esperado): **${formatDate(schedule.endDate)}**`, '');
+  for (const milestone of estimate.milestones ?? []) {
+    const p80 = milestone.percentiles.find((row) => row.percentile === 80);
+    lines.push(`Fecha de ${milestone.name.toLowerCase()}: **${formatDate(milestone.plannedDate)}**${p80 ? ` (P80 ${formatDate(p80.endDate)})` : ''}`, '');
+  }
 
   lines.push('## Esfuerzo por etapa', '');
   lines.push('| Etapa | O | M | P | Esperado (PERT) | ± σ | Contingencia | Inicio | Fin |');

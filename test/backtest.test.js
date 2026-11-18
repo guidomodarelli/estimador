@@ -21,7 +21,7 @@ const quickProject = (answers) => ({
 });
 
 describe('Modelos de incertidumbre', () => {
-  const answers = { taskType: 'feature', anchorHours: 20 };
+  const answers = { complexity: 'media', developmentHours: 20 };
 
   it('el factor común ensancha el rango sin mover la mediana de forma apreciable', () => {
     const independent = buildEstimate(quickProject(answers), { runs: 2000, uncertaintyModel: { kind: UNCERTAINTY_MODEL.INDEPENDENT }, includeSchedule: false });
@@ -78,7 +78,7 @@ describe('Backtest', () => {
 
   it('rechaza registros sin horas reales, nombrando el registro', () => {
     assert.throws(
-      () => runBacktest([{ id: 'tarea-sin-horas', answers: { taskType: 'bug', anchorHours: 3 }, actualHours: 0 }]),
+      () => runBacktest([{ id: 'tarea-sin-horas', answers: { complexity: 'baja', developmentHours: 3 }, actualHours: 0 }]),
       (error) => error instanceof EstimationInputError && error.message.includes('tarea-sin-horas'),
     );
   });

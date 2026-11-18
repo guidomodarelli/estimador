@@ -1,5 +1,6 @@
 import { computeEffectiveCapacity, formatHours } from '../../src/core/index.js';
 import { escapeHtml, optionsHtml } from '../utils/dom.js';
+import { iconSvg } from '../utils/icons.js';
 
 const DEDUCTION_SCOPE_OPTIONS = Object.freeze([
   { value: 'external', label: 'Ajena a las tareas (se descuenta)' },
@@ -30,7 +31,7 @@ function deductionsHtml(person, personIndex) {
         <td><input type="number" min="0" step="0.25" class="cell-number" aria-label="Horas por día" data-bind="${path}.hours" data-type="number"></td>
         <td><select class="cell-select" aria-label="Tratamiento" data-bind="${path}.scope">${optionsHtml(DEDUCTION_SCOPE_OPTIONS, deduction.scope ?? 'external')}</select></td>
         <td><select class="cell-select" aria-label="Tipo" data-bind="${path}.kind">${optionsHtml(DEDUCTION_KIND_OPTIONS, deduction.kind ?? 'other')}</select></td>
-        <td><button type="button" class="button icon" data-action="remove-deduction" data-person-index="${personIndex}" data-index="${deductionIndex}" aria-label="Eliminar ${escapeHtml(deduction.label)}">✕</button></td>
+        <td><button type="button" class="button icon" data-action="remove-deduction" data-person-index="${personIndex}" data-index="${deductionIndex}" aria-label="Eliminar ${escapeHtml(deduction.label)}">${iconSvg('close')}</button></td>
       </tr>`;
     })
     .join('');
@@ -55,7 +56,7 @@ export function renderTeamView(store, focusPersonId) {
           <td><input type="number" min="0" step="0.25" class="cell-number" placeholder="Auto" aria-label="Capacidad manual (h), vacío para calcular" data-bind="${path}.manualEffectiveHours" data-type="optional-number"></td>
           <td><input type="text" class="cell-text" placeholder="2026-12-24, 2026-12-31" aria-label="Ausencias (fechas separadas por coma)" data-bind="${path}.absences" data-type="list"></td>
           <td class="computed" id="person-capacity-${index}">${capacityText(person)}</td>
-          <td>${team.people.length > 1 ? `<button type="button" class="button icon" data-action="remove-person" data-index="${index}" aria-label="Eliminar ${escapeHtml(person.name)}">✕</button>` : ''}</td>
+          <td>${team.people.length > 1 ? `<button type="button" class="button icon" data-action="remove-person" data-index="${index}" aria-label="Eliminar ${escapeHtml(person.name)}">${iconSvg('close')}</button>` : ''}</td>
         </tr>
         <tr class="person-deductions${person.id === focusPersonId ? ' focused' : ''}"><td colspan="7"><details${person.id === focusPersonId ? ' open' : ''}><summary>Descuentos diarios de ${escapeHtml(person.name || 'esta persona')}</summary>${deductionsHtml(person, index)}</details></td></tr>
       </tbody>`;

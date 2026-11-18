@@ -40,9 +40,9 @@ export function renderQuarterView(store, todayIso, quarterOffset) {
     ${renderQuarterLoad(weeks)}
     <div class="legend"><span class="legend-item">Horas comprometidas</span><span class="legend-item over">Excede la capacidad</span><span class="legend-item capacity">Capacidad</span></div>
     ${inQuarter.length ? `<div class="table-scroll"><table class="data-table compact">
-      <thead><tr><th>Estimación</th><th>Inicio</th><th>Probable</th><th>P80</th><th>Horas P80</th></tr></thead>
+      <thead><tr><th>Estimación</th><th>Inicio</th><th>Rollout</th><th>Fin probable</th><th>Fin P80</th><th>Horas P80</th></tr></thead>
       <tbody>${inQuarter
         .sort((left, right) => left.summary.p80Date.localeCompare(right.summary.p80Date))
-        .map((estimate) => `<tr><td><button type="button" class="button link" data-action="open-estimate" data-id="${escapeHtml(estimate.id)}">${escapeHtml(estimate.project.name || 'Sin nombre')}</button></td><td>${shortDate(estimate.summary.startDate)}</td><td>${shortDate(estimate.summary.endDate)}</td><td>${shortDate(estimate.summary.p80Date)}</td><td>${formatHours(estimate.summary.p80Hours)}</td></tr>`)
+        .map((estimate) => `<tr><td><button type="button" class="button link" data-action="open-estimate" data-id="${escapeHtml(estimate.id)}">${escapeHtml(estimate.project.name || 'Sin nombre')}</button></td><td>${shortDate(estimate.summary.startDate)}</td><td>${estimate.summary.rolloutDate ? shortDate(estimate.summary.rolloutDate) : '—'}</td><td>${shortDate(estimate.summary.endDate)}</td><td>${shortDate(estimate.summary.p80Date)}</td><td>${formatHours(estimate.summary.p80Hours)}</td></tr>`)
         .join('')}</tbody></table></div>` : ''}`;
 }

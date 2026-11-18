@@ -1,4 +1,4 @@
-import { createStagesFromTemplate, EstimationInputError, percentError, renderMarkdownSummary, TASK_TYPE } from '../src/core/index.js';
+import { EstimationInputError, percentError, renderMarkdownSummary, RFC_PART_OPTIONS, templateDependencies } from '../src/core/index.js';
 import { byId, downloadFile, parseInputValue, preserveFocus, setAtPath, showToast, slugify, syncBoundInputs, uniqueId } from './utils/dom.js';
 import { loadStore, parseImportedStore, saveStore, TAB, VIEW } from './state/store.js';
 import { actualTotal, computeEstimate, createNewEstimate, ESTIMATE_STATUS, refreshSummary, regenerateStages, summarizeResult } from './state/estimates.js';
@@ -128,6 +128,18 @@ function markStagesCustomized() {
   if (status) status.innerHTML = 'Editaste las etapas a mano: las respuestas ya no las regeneran. <button type="button" class="button link" data-action="regenerate-stages">Regenerar</button>';
 }
 
+/** Regenera las etapas tras cambiar una respuesta; devuelve false si la respuesta no es válida. */
+function regenerateFromAnswers() {
+  try {
+    regenerateStages(currentEstimate(), store.history);
+    return true;
+  } catch (generationError) {
+    if (!(generationError instanceof EstimationInputError)) throw generationError;
+    showError(generationError.message.replace(/^[\w:]+ failed: /, ''));
+    return false;
+  }
+}
+
 function applyBoundChange(input, value) {
   const path = input.dataset.bind;
   setAtPath(bindingRoot(), path, value);
@@ -141,14 +153,7 @@ function applyBoundChange(input, value) {
     scheduleSummaryRefresh();
   }
   if (path.startsWith(QUICK_BIND_PREFIX) && !currentEstimate().project.quick.customized) {
-    try {
-      regenerateStages(currentEstimate(), store.history);
-    } catch (generationError) {
-      if (!(generationError instanceof EstimationInputError)) throw generationError;
-      showError(generationError.message.replace(/^[\w:]+ failed: /, ''));
-      return;
-    }
-    renderMain();
+    if (regenerateFromAnswers()) renderMain();
     return;
   }
   if ('sidebarRefresh' in input.dataset) renderSidebarOnly();
@@ -162,12 +167,6 @@ function openEstimate(estimateId) {
   openStageRows.clear();
   persist();
   render();
-}
-
-function templateDependencies(stageId) {
-  const estimate = currentEstimate();
-  const templateStage = createStagesFromTemplate(estimate.project.taskType ?? TASK_TYPE.FEATURE).find((stage) => stage.id === stageId);
-  return templateStage ? [...templateStage.dependsOn] : [];
 }
 
 function addPerson(name) {
@@ -265,7 +264,7 @@ const ACTIONS = {
     const records = (result?.stages ?? [])
       .filter((stage) => Number(estimate.actuals[stage.id]) > 0 && stage.expected > 0)
       .map((stage) => ({
-        taskType: estimate.project.taskType,
+        complexity: estimate.project.complexity,
         stageId: stage.id,
         estimatedHours: stage.expected + stage.contingencyHours,
         actualHours: Number(estimate.actuals[stage.id]),
@@ -452,6 +451,17 @@ document.addEventListener('change', (event) => {
     markStagesCustomized();
     touchCurrentEstimate();
     scheduleRecompute();
+    return;
+  }
+  if (input.dataset.action === 'toggle-rfc-part') {
+    const { quick } = currentEstimate().project;
+    const selected = new Set(quick.rfcParts ?? RFC_PART_OPTIONS);
+    if (input.checked) selected.add(input.dataset.rfcPart);
+    else selected.delete(input.dataset.rfcPart);
+    quick.rfcParts = RFC_PART_OPTIONS.filter((part) => selected.has(part));
+    touchCurrentEstimate();
+    if (!quick.customized && regenerateFromAnswers()) renderMain();
+    else scheduleRecompute();
     return;
   }
   if (input.dataset.action === 'toggle-dependency') {

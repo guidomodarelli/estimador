@@ -1,56 +1,72 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildEstimate, buildStagesFromAnswers, EstimationInputError } from '../src/core/index.js';
+import { buildEstimate, buildStagesFromAnswers, DEFAULT_DEVELOPMENT_HOURS, EstimationInputError, RFC_PART, STAGE_ID } from '../src/core/index.js';
 
 const MONDAY = '2026-11-16';
 const SINGLE_DEV = [{ id: 'dev', manualEffectiveHours: 5 }];
 const stageById = (stages, stageId) => stages.find((stage) => stage.id === stageId);
-const estimateFrom = (answers) =>
-  buildEstimate({ name: 'Rápida', startDate: MONDAY, people: SINGLE_DEV, stages: buildStagesFromAnswers(answers).stages }, { runs: 0 });
+const estimateFrom = (answers, runs = 0) =>
+  buildEstimate({ name: 'Iniciativa', startDate: MONDAY, people: SINGLE_DEV, stages: buildStagesFromAnswers(answers).stages }, { runs });
 
-describe('Estimación rápida (5 preguntas)', () => {
-  it('con respuestas por defecto, desarrollo usa exactamente las horas indicadas como M', () => {
-    const { stages } = buildStagesFromAnswers({ taskType: 'feature', anchorHours: 10 });
-    assert.equal(stageById(stages, 'desarrollo').mostLikely, 10);
-    for (const stage of stages.filter((candidate) => candidate.included)) {
-      assert.ok(stage.optimistic <= stage.mostLikely && stage.mostLikely <= stage.pessimistic, stage.id);
+describe('Estimación por complejidad', () => {
+  it('genera RFC → Desarrollo → Pruebas → Rollout → Demo o evidencia, en ese orden', () => {
+    const estimate = estimateFrom({ complexity: 'media' });
+    assert.deepEqual(estimate.stages.map((stage) => stage.id), [STAGE_ID.RFC, STAGE_ID.DEVELOPMENT, STAGE_ID.TESTING, STAGE_ID.ROLLOUT, STAGE_ID.EVIDENCE]);
+    for (const [previous, next] of estimate.stages.slice(0, -1).map((stage, index) => [stage, estimate.stages[index + 1]])) {
+      assert.ok(next.startDate >= previous.endDate, `${next.id} empieza antes de que termine ${previous.id}`);
     }
   });
 
-  it('el doble de horas de programación duplica aproximadamente el esfuerzo total', () => {
-    const small = estimateFrom({ taskType: 'feature', anchorHours: 10 }).effort.expected;
-    const large = estimateFrom({ taskType: 'feature', anchorHours: 20 }).effort.expected;
-    assert.ok(Math.abs(large / small - 2) < 0.15, `ratio ${large / small}`);
+  it('sin horas de desarrollo usa las sugeridas para la complejidad, y con horas usa exactamente esas como M', () => {
+    const suggested = buildStagesFromAnswers({ complexity: 'alta' });
+    assert.equal(stageById(suggested.stages, STAGE_ID.DEVELOPMENT).mostLikely, DEFAULT_DEVELOPMENT_HOURS.alta);
+    const explicit = buildStagesFromAnswers({ complexity: 'alta', developmentHours: 30 });
+    assert.equal(stageById(explicit.stages, STAGE_ID.DEVELOPMENT).mostLikely, 30);
+    for (const stage of explicit.stages) assert.ok(stage.optimistic <= stage.mostLikely && stage.mostLikely <= stage.pessimistic, stage.id);
   });
 
-  it('requerimientos ambiguos ensanchan la P y suben el esperado, pero no tocan M', () => {
-    const clear = buildStagesFromAnswers({ taskType: 'feature', anchorHours: 20 });
-    const ambiguous = buildStagesFromAnswers({ taskType: 'feature', anchorHours: 20, requirementsClarity: 'ambiguos' });
-    assert.equal(stageById(ambiguous.stages, 'desarrollo').mostLikely, stageById(clear.stages, 'desarrollo').mostLikely);
-    assert.ok(stageById(ambiguous.stages, 'desarrollo').pessimistic > stageById(clear.stages, 'desarrollo').pessimistic);
-    assert.ok(ambiguous.explanations.some((text) => text.includes('ambiguos')));
+  it('más complejidad, con las mismas horas de desarrollo, alarga RFC, pruebas, demo y la fecha de rollout', () => {
+    const low = estimateFrom({ complexity: 'baja', developmentHours: 20 });
+    const high = estimateFrom({ complexity: 'alta', developmentHours: 20 });
+    for (const stageId of [STAGE_ID.RFC, STAGE_ID.TESTING, STAGE_ID.EVIDENCE]) {
+      assert.ok(stageById(high.stages, stageId).expected > stageById(low.stages, stageId).expected, stageId);
+    }
+    assert.ok(high.milestones[0].plannedDate > low.milestones[0].plannedDate);
   });
 
-  it('las dependencias externas alargan la fecha sin sumar esfuerzo', () => {
-    const none = estimateFrom({ taskType: 'feature', anchorHours: 20 });
-    const many = estimateFrom({ taskType: 'feature', anchorHours: 20, externalDependencies: 'múltiples' });
-    assert.equal(many.effort.expected, none.effort.expected);
-    assert.ok(many.schedule.workingDays > none.schedule.workingDays);
+  it('el RFC suma solo las partes elegidas, y sin partes queda desactivado', () => {
+    const full = buildStagesFromAnswers({ complexity: 'media' });
+    const onlyUseCases = buildStagesFromAnswers({ complexity: 'media', rfcParts: [RFC_PART.USE_CASES] });
+    assert.ok(stageById(onlyUseCases.stages, STAGE_ID.RFC).mostLikely < stageById(full.stages, STAGE_ID.RFC).mostLikely);
+    const withoutRfc = estimateFrom({ complexity: 'media', rfcParts: [] });
+    assert.ok(!withoutRfc.stages.some((stage) => stage.id === STAGE_ID.RFC));
+    assert.equal(withoutRfc.stages[0].startDate, MONDAY, 'sin RFC, el desarrollo arranca el primer día');
   });
 
-  it('en un spike la pregunta dimensiona la investigación', () => {
-    const { stages } = buildStagesFromAnswers({ taskType: 'spike', anchorHours: 6 });
-    assert.equal(stageById(stages, 'investigacion').mostLikely, 6);
+  it('reporta la fecha de rollout como hito, antes del fin, con P50 ≤ P80 ≤ P90', () => {
+    const estimate = estimateFrom({ complexity: 'media' }, 400);
+    const [rollout] = estimate.milestones;
+    assert.equal(rollout.id, STAGE_ID.ROLLOUT);
+    assert.ok(rollout.plannedDate < estimate.schedule.endDate, 'la evidencia espera el seguimiento del rollout');
+    const [p50, p80, p90] = rollout.percentiles.map((row) => row.endDate);
+    assert.ok(p50 <= p80 && p80 <= p90);
+  });
+
+  it('cada valor aplicado queda explicado en los supuestos', () => {
+    const { explanations } = buildStagesFromAnswers({ complexity: 'alta' });
+    assert.ok(explanations.some((text) => text.includes('Casos de uso')));
+    assert.ok(explanations.some((text) => text.startsWith('Rollout')));
+    assert.ok(explanations.some((text) => text.includes('sugerido')));
   });
 
   it('aplica la calibración histórica a todas las etapas', () => {
-    const plain = buildStagesFromAnswers({ taskType: 'bug', anchorHours: 4 });
-    const calibrated = buildStagesFromAnswers({ taskType: 'bug', anchorHours: 4, calibrationRatio: 1.5 });
-    assert.equal(stageById(calibrated.stages, 'desarrollo').mostLikely, stageById(plain.stages, 'desarrollo').mostLikely * 1.5);
+    const plain = buildStagesFromAnswers({ complexity: 'baja', developmentHours: 4 });
+    const calibrated = buildStagesFromAnswers({ complexity: 'baja', developmentHours: 4, calibrationRatio: 1.5 });
+    assert.equal(stageById(calibrated.stages, STAGE_ID.DEVELOPMENT).mostLikely, stageById(plain.stages, STAGE_ID.DEVELOPMENT).mostLikely * 1.5);
   });
 
-  it('rechaza horas no positivas y respuestas fuera de las opciones', () => {
-    assert.throws(() => buildStagesFromAnswers({ taskType: 'bug', anchorHours: 0 }), EstimationInputError);
-    assert.throws(() => buildStagesFromAnswers({ taskType: 'bug', anchorHours: 3, complexity: 'extrema' }), /complexity/);
+  it('rechaza complejidades y partes del RFC fuera de las opciones', () => {
+    assert.throws(() => buildStagesFromAnswers({ complexity: 'extrema' }), (error) => error instanceof EstimationInputError && /baja \| media \| alta/.test(error.message));
+    assert.throws(() => buildStagesFromAnswers({ rfcParts: ['wireframes'] }), /wireframes/);
   });
 });

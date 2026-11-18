@@ -30,12 +30,12 @@ describe('CLI', () => {
   });
   after(() => rm(workDirectory, { recursive: true, force: true }));
 
-  it('init genera un proyecto válido desde la plantilla', async () => {
-    const result = await runCli(['init', '--template', 'bug', '--start', '2026-11-16', '--output', projectPath]);
+  it('init genera una iniciativa válida con la complejidad y las partes del RFC pedidas', async () => {
+    const result = await runCli(['init', '--complexity', 'baja', '--rfc', 'ninguno', '--start', '2026-11-16', '--output', projectPath]);
     assert.equal(result.exitCode, 0);
     const project = JSON.parse(await readFile(projectPath, 'utf8'));
-    assert.equal(project.taskType, 'bug');
-    assert.ok(project.stages.some((stage) => stage.included === false));
+    assert.equal(project.complexity, 'baja');
+    assert.equal(project.stages.find((stage) => stage.id === 'rfc').included, false);
   });
 
   it('estima en texto plano sin escapes ANSI cuando NO_COLOR está definida', async () => {
@@ -44,6 +44,7 @@ describe('CLI', () => {
     assert.doesNotMatch(result.stdout, ANSI_ESCAPE_PATTERN);
     assert.match(result.stdout, /P80/);
     assert.match(result.stdout, /Fecha probable/);
+    assert.match(result.stdout, /Fecha de rollout/);
   });
 
   it('--format json devuelve un objeto parseable con la simulación', async () => {
@@ -53,21 +54,28 @@ describe('CLI', () => {
     assert.equal(estimate.simulation.seed, 3);
   });
 
-  it('quick estima desde una sola cifra y guarda el proyecto generado', async () => {
+  it('quick estima con la complejidad y las horas de desarrollo, y guarda el proyecto generado', async () => {
     const savedPath = join(workDirectory, 'rapida.json');
-    const result = await runCli(['quick', '6', '--type', 'bug', '--clarity', 'ambiguos', '--format', 'json', '--runs', '0', '--start', '2026-11-16', '--save', savedPath]);
+    const result = await runCli(['quick', '6', '--complexity', 'alta', '--rfc', 'casos-de-uso,metricas-tracks', '--format', 'json', '--runs', '0', '--start', '2026-11-16', '--save', savedPath]);
     assert.equal(result.exitCode, 0);
     const estimate = JSON.parse(result.stdout);
     assert.equal(estimate.stages.find((stage) => stage.id === 'desarrollo').mostLikely, 6);
-    assert.ok(estimate.assumptions.some((assumption) => assumption.includes('ambiguos')));
+    assert.ok(estimate.assumptions.some((assumption) => assumption.includes('Casos de uso, Métricas (tracks)')));
+    assert.equal(estimate.milestones[0].id, 'rollout');
     const saved = JSON.parse(await readFile(savedPath, 'utf8'));
-    assert.equal(saved.taskType, 'bug');
+    assert.equal(saved.complexity, 'alta');
   });
 
-  it('quick sin horas válidas: exit code 2', async () => {
+  it('quick sin horas usa las sugeridas para la complejidad', async () => {
+    const result = await runCli(['quick', '--complexity', 'baja', '--format', 'json', '--runs', '0']);
+    assert.equal(result.exitCode, 0);
+    assert.equal(JSON.parse(result.stdout).stages.find((stage) => stage.id === 'desarrollo').mostLikely, 8);
+  });
+
+  it('quick con horas inválidas: exit code 2', async () => {
     const result = await runCli(['quick', 'muchas']);
     assert.equal(result.exitCode, 2);
-    assert.match(result.stderr, /horas de programación/);
+    assert.match(result.stderr, /horas de desarrollo/);
   });
 
   it('quick con una respuesta fuera de las opciones: exit code 1 con las opciones válidas', async () => {

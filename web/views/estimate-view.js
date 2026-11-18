@@ -1,17 +1,20 @@
 import {
-  ANCHOR_STAGE_BY_TASK_TYPE,
+  COMPLEXITY_LABELS,
+  COMPLEXITY_OPTIONS,
+  DEFAULT_DEVELOPMENT_HOURS,
   describeUncertaintyModel,
   formatDate,
   formatDays,
   formatHours,
-  QUICK_OPTIONS,
   renderMarkdownSummary,
-  TASK_TYPE,
+  RFC_PART_LABELS,
+  RFC_PART_OPTIONS,
 } from '../../src/core/index.js';
 import { renderGantt } from '../charts/gantt.js';
 import { renderProbabilityCurve } from '../charts/probability-curve.js';
 import { renderStepBars } from '../charts/step-bars.js';
 import { byId, escapeHtml, optionsHtml } from '../utils/dom.js';
+import { iconSvg } from '../utils/icons.js';
 import { actualTotal, calibrationFor, ESTIMATE_STATUS, isDoubleCountWarning, referenceClassRatios } from '../state/estimates.js';
 import { TAB } from '../state/store.js';
 
@@ -24,15 +27,6 @@ const TABS = Object.freeze([
   { id: TAB.SHARE, label: 'Compartir' },
 ]);
 
-const QUICK_QUESTIONS = Object.freeze([
-  { key: 'requirementsClarity', label: 'Requerimientos' },
-  { key: 'complexity', label: 'Complejidad' },
-  { key: 'priorExperience', label: '¿Algo parecido antes?' },
-  { key: 'externalDependencies', label: 'Depende de otros' },
-]);
-/** Etiquetas cortas para que los cuatro tipos entren en una sola línea. */
-const SHORT_TYPE_LABELS = Object.freeze({ [TASK_TYPE.BUG]: 'Bug', [TASK_TYPE.FEATURE]: 'Funcionalidad', [TASK_TYPE.REFACTOR]: 'Refactor', [TASK_TYPE.SPIKE]: 'Spike' });
-const ANCHOR_LABEL_BY_STAGE = Object.freeze({ desarrollo: 'Horas de programación', investigacion: 'Horas de investigación' });
 
 /* ───────────── Encabezado y pestañas ───────────── */
 
@@ -70,28 +64,31 @@ function choiceRowHtml(bindPath, label, options) {
 function quickHtml(context) {
   const { estimate, history } = context;
   const answers = estimate.project.quick;
-  const anchorStageId = ANCHOR_STAGE_BY_TASK_TYPE[answers.taskType];
-  const historyRatios = referenceClassRatios(history, answers.taskType);
-  const calibration = calibrationFor(history, answers.taskType);
+  const historyRatios = referenceClassRatios(history, answers.complexity);
+  const calibration = calibrationFor(history, answers.complexity);
+  const selectedParts = answers.rfcParts ?? RFC_PART_OPTIONS;
   const historyNote = historyRatios
-    ? `<p class="note">El rango sale de tus ${historyRatios.length} tareas terminadas de este tipo.</p>`
+    ? `<p class="note">El rango sale de tus ${historyRatios.length} iniciativas terminadas de esta complejidad.</p>`
     : calibration
       ? `<label class="inline-check"><input type="checkbox" data-bind="project.quick.applyCalibration"> Ajustar con mi historial (lo real fue ×${formatDays(calibration.medianRatio)} lo estimado)</label>`
       : '';
   const status = answers.customized
     ? `Editaste las etapas a mano: las respuestas ya no las regeneran. <button type="button" class="button link" data-action="regenerate-stages">Regenerar</button>`
-    : 'Las etapas se generan con estas respuestas.';
+    : 'RFC → Desarrollo → Pruebas → Rollout → Demo o evidencia: los tiempos salen de la complejidad.';
   return `<section class="quick" aria-labelledby="quick-heading">
     <h2 id="quick-heading" class="section-title">Preguntas</h2>
-    ${choiceRowHtml('project.quick.taskType', 'Tipo', Object.values(TASK_TYPE).map((taskType) => ({ value: taskType, label: SHORT_TYPE_LABELS[taskType] })))}
+    ${choiceRowHtml('project.quick.complexity', 'Complejidad', COMPLEXITY_OPTIONS.map((complexity) => ({ value: complexity, label: COMPLEXITY_LABELS[complexity] })))}
     <div class="choice-row">
-      <label class="choice-label" for="anchor-hours">${ANCHOR_LABEL_BY_STAGE[anchorStageId]}</label>
+      <span class="choice-label" id="rfc-parts-label">El RFC incluye</span>
+      <span class="chips" role="group" aria-labelledby="rfc-parts-label">${RFC_PART_OPTIONS.map((part) => `<label class="chip"><input type="checkbox" data-action="toggle-rfc-part" data-rfc-part="${escapeHtml(part)}"${selectedParts.includes(part) ? ' checked' : ''}>${escapeHtml(RFC_PART_LABELS[part])}</label>`).join('')}</span>
+    </div>
+    <div class="choice-row">
+      <label class="choice-label" for="development-hours">Horas de desarrollo</label>
       <span class="inline-fields">
-        <input id="anchor-hours" type="number" min="0.5" step="0.5" inputmode="decimal" class="hours-input" data-bind="project.quick.anchorHours" data-type="number" aria-describedby="anchor-hint">
-        <small id="anchor-hint">lo más probable</small>
+        <input id="development-hours" type="number" min="0.5" step="0.5" inputmode="decimal" class="hours-input" placeholder="${DEFAULT_DEVELOPMENT_HOURS[answers.complexity]}" data-bind="project.quick.developmentHours" data-type="optional-number" aria-describedby="development-hint">
+        <small id="development-hint">lo más probable · vacío = ${DEFAULT_DEVELOPMENT_HOURS[answers.complexity]} h sugeridas</small>
       </span>
     </div>
-    ${QUICK_QUESTIONS.map((question) => choiceRowHtml(`project.quick.${question.key}`, question.label, QUICK_OPTIONS[question.key].map((option) => ({ value: option, label: option })))).join('')}
     <div class="choice-row">
       <label class="choice-label" for="start-date">Inicio</label>
       <input id="start-date" type="date" class="date-input" data-bind="project.startDate">
@@ -160,8 +157,8 @@ function stageTableHtml(context) {
         <td><input type="number" min="0" step="0.5" class="cell-number" aria-label="Pesimista de ${escapeHtml(stage.name)}" data-bind="project.stages.${index}.pessimistic" data-type="number"></td>
         <td class="computed" id="stage-expected-${index}">—</td>
         ${showAssignee ? `<td>${assigneeSelectHtml(stage, index, team)}</td>` : ''}
-        <td><button type="button" class="button link start-after" data-action="toggle-stage-options" data-index="${index}" aria-expanded="${Boolean(openState)}">${escapeHtml(describeStart(stage, stages))}${stage.waitWorkingDaysAfter ? ` · espera ${stage.waitWorkingDaysAfter} d` : ''}</button></td>
-        <td><button type="button" class="button icon" data-action="remove-stage" data-index="${index}" aria-label="Eliminar ${escapeHtml(stage.name)}">✕</button></td>
+        <td><button type="button" class="button link start-after" data-action="toggle-stage-options" data-index="${index}" aria-expanded="${Boolean(openState)}">${escapeHtml(describeStart(stage, stages))}</button>${stage.waitWorkingDaysAfter ? `<small class="wait-note">+${stage.waitWorkingDaysAfter} d de espera</small>` : ''}</td>
+        <td><button type="button" class="button icon" data-action="remove-stage" data-index="${index}" aria-label="Eliminar ${escapeHtml(stage.name)}">${iconSvg('close')}</button></td>
       </tr>${openState ? stageOptionsRowHtml(stage, index, stages, openState, team, columnCount) : ''}`;
     })
     .join('');
@@ -171,7 +168,7 @@ function stageTableHtml(context) {
       <button type="button" class="button" data-action="add-stage">+ Etapa</button>
     </div>
     <div class="table-scroll"><table class="stage-table">
-      <thead><tr><th><span class="sr-only">Incluir</span></th><th>Etapa</th><th title="Optimista">O</th><th title="Más probable">M</th><th title="Pesimista">P</th><th>Esperado</th>${showAssignee ? '<th>Responsable</th>' : ''}<th>Empieza después de</th><th><span class="sr-only">Eliminar</span></th></tr></thead>
+      <thead><tr><th><span class="sr-only">Incluir</span></th><th>Etapa</th><th title="Optimista">O</th><th title="Más probable">M</th><th title="Pesimista">P</th><th>Esperado</th>${showAssignee ? '<th>Responsable</th>' : ''}<th>Después de</th><th><span class="sr-only">Eliminar</span></th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr><td></td><td>Total</td><td id="total-optimistic">—</td><td id="total-most-likely">—</td><td id="total-pessimistic">—</td><td id="total-expected" class="computed">—</td><td colspan="${showAssignee ? 3 : 2}" id="total-note"></td></tr></tfoot>
     </table></div>
@@ -184,7 +181,7 @@ function actualsHtml(context) {
   const isDone = estimate.status === ESTIMATE_STATUS.DONE;
   return `<details class="fold"${isDone ? ' open' : ''}>
     <summary>${isDone ? 'Horas reales registradas' : 'Terminé la tarea: registrar horas reales'}</summary>
-    <p class="note">Con 5 tareas terminadas del mismo tipo, el rango de las próximas sale de tu historial.</p>
+    <p class="note">Con 5 iniciativas terminadas de la misma complejidad, el rango de las próximas sale de tu historial.</p>
     <div class="actuals-grid">${included
       .map((stage) => `<label>${escapeHtml(stage.name)}<input type="number" min="0" step="0.5" placeholder="horas" data-bind="actuals.${escapeHtml(stage.id)}" data-type="optional-number"${isDone ? ' disabled' : ''}></label>`)
       .join('')}</div>
@@ -224,7 +221,7 @@ function risksHtml(context) {
       <td><input type="number" min="0" step="0.5" class="cell-number" aria-label="Impacto (h)" data-bind="project.risks.${index}.impactHours" data-type="number"></td>
       <td><select class="cell-select" aria-label="Etapa afectada" data-bind="project.risks.${index}.activityId" data-type="optional-text">${optionsHtml(stageOptions, risk.activityId ?? '')}</select></td>
       <td><input type="checkbox" aria-label="Ya contemplado en la pesimista" data-bind="project.risks.${index}.includedInPessimistic"></td>
-      <td><button type="button" class="button icon" data-action="remove-risk" data-index="${index}" aria-label="Eliminar riesgo">✕</button></td>
+      <td><button type="button" class="button icon" data-action="remove-risk" data-index="${index}" aria-label="Eliminar riesgo">${iconSvg('close')}</button></td>
     </tr>`)
     .join('');
   return `<section aria-labelledby="risks-heading">
@@ -249,12 +246,25 @@ export function renderEstimateView(context) {
   return `${headerHtml(context.estimate)}${tabsHtml(ui.tab)}<div id="tab-panel" role="tabpanel" aria-labelledby="tab-${ui.tab}" class="tab-panel">${panels[ui.tab]()}</div>`;
 }
 
+/** La fecha de rollout es lo que se comparte: encabeza el resultado con su P80 al lado. */
+function leadStatHtml(result) {
+  const rollout = result.milestones?.[0];
+  if (!rollout) return '';
+  const p80 = rollout.percentiles.find((row) => row.percentile === 80);
+  return `<div class="stat lead">
+    <span class="stat-label">Fecha de rollout</span>
+    <span class="stat-value">${formatDate(rollout.plannedDate)}</span>
+    <span class="stat-hint">${p80 ? `Con 80 % de confianza, a más tardar el ${formatDate(p80.endDate)}` : 'Fin de la etapa de rollout'}</span>
+  </div>`;
+}
+
 function statsHtml(result) {
   const p80 = result.simulation?.percentiles.find((row) => row.percentile === 80);
   return `
-    <div class="stat"><span class="stat-label">Esfuerzo esperado</span><span class="stat-value">${formatHours(result.effort.totalExpected)}</span><span class="stat-hint">${formatHours(result.effort.optimistic)} – ${formatHours(result.effort.pessimistic + result.effort.contingencyHours)}</span></div>
-    <div class="stat"><span class="stat-label">Fecha probable</span><span class="stat-value">${formatDate(result.schedule.endDate)}</span><span class="stat-hint">${result.duration.scheduledWorkingDays} días laborales</span></div>
-    ${p80 ? `<div class="stat highlight"><span class="stat-label">Con 80 % de confianza</span><span class="stat-value">${formatDate(p80.endDate)}</span><span class="stat-hint">${p80.workingDays} días · ${formatHours(p80.effortHours)}</span></div>` : ''}`;
+    ${leadStatHtml(result)}
+    <div class="stat"><span class="stat-label">Fin probable</span><span class="stat-value">${formatDate(result.schedule.endDate)}</span><span class="stat-hint">${result.duration.scheduledWorkingDays} días laborales</span></div>
+    ${p80 ? `<div class="stat"><span class="stat-label">Fin P80</span><span class="stat-value">${formatDate(p80.endDate)}</span><span class="stat-hint">${p80.workingDays} días laborales</span></div>` : ''}
+    <div class="stat"><span class="stat-label">Esfuerzo esperado</span><span class="stat-value">${formatHours(result.effort.totalExpected)}</span><span class="stat-hint">${formatHours(result.effort.optimistic)} – ${formatHours(result.effort.pessimistic + result.effort.contingencyHours)}</span></div>`;
 }
 
 function warningsHtml(result) {
@@ -270,7 +280,8 @@ export function renderEstimateResults(result, context) {
   const p80 = result.simulation?.percentiles.find((row) => row.percentile === 80);
   const headline = byId('estimate-headline');
   if (headline && estimate.status !== ESTIMATE_STATUS.DONE) {
-    headline.textContent = `${formatHours(result.effort.totalExpected)} · probable ${formatDate(result.schedule.endDate)}${p80 ? ` · P80 ${formatDate(p80.endDate)}` : ''}`;
+    const rollout = result.milestones?.[0];
+    headline.textContent = `${formatHours(result.effort.totalExpected)}${rollout ? ` · rollout ${formatDate(rollout.plannedDate)}` : ''} · fin ${formatDate(result.schedule.endDate)}${p80 ? ` (P80 ${formatDate(p80.endDate)})` : ''}`;
   }
 
   if (ui.tab === TAB.ESTIMATE) {

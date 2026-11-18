@@ -2,7 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { quarterBounds, weeklyLoad } from '../web/state/quarter.js';
 import { createNewEstimate, referenceClassRatios, regenerateStages, computeEstimate, summarizeResult, isDoubleCountWarning } from '../web/state/estimates.js';
-import { createSampleProject } from '../src/core/index.js';
+import { migrateTaskTypeStore } from '../web/state/store.js';
+import { createSampleProject, STAGE_KIND } from '../src/core/index.js';
 
 const TEAM = { people: [{ id: 'dev', manualEffectiveHours: 5 }], calendar: {}, meetingsReviewed: false };
 
@@ -39,20 +40,48 @@ describe('Estimaciones guardadas', () => {
     assert.equal(estimate.project.quick.customized, false);
   });
 
-  it('el historial se agrupa por estimación para reference class', () => {
+  it('el historial se agrupa por iniciativa y complejidad para reference class', () => {
     const history = [1.2, 1.4, 0.9, 1.1, 1.6].flatMap((ratio, index) => [
-      { taskType: 'bug', estimateId: `e${index}`, stageId: 'desarrollo', estimatedHours: 4, actualHours: 4 * ratio },
-      { taskType: 'bug', estimateId: `e${index}`, stageId: 'testing', estimatedHours: 2, actualHours: 2 * ratio },
+      { complexity: 'baja', estimateId: `e${index}`, stageId: 'desarrollo', estimatedHours: 4, actualHours: 4 * ratio },
+      { complexity: 'baja', estimateId: `e${index}`, stageId: 'pruebas', estimatedHours: 2, actualHours: 2 * ratio },
     ]);
-    const ratios = referenceClassRatios(history, 'bug');
+    const ratios = referenceClassRatios(history, 'baja');
     assert.equal(ratios.length, 5);
     assert.ok(Math.abs(ratios[0] - 1.2) < 1e-9);
-    assert.equal(referenceClassRatios(history, 'feature'), null);
+    assert.equal(referenceClassRatios(history, 'alta'), null);
+  });
+
+  it('cambiar la complejidad regenera las etapas y mueve la fecha de rollout', () => {
+    const estimate = createNewEstimate('2026-11-16');
+    const before = summarizeResult(computeEstimate(estimate, TEAM, [], 0));
+    estimate.project.quick.complexity = 'alta';
+    regenerateStages(estimate, []);
+    const after = summarizeResult(computeEstimate(estimate, TEAM, [], 0));
+    assert.equal(estimate.project.complexity, 'alta');
+    assert.ok(after.rolloutDate > before.rolloutDate);
+  });
+
+  it('migra datos guardados por tipo de tarea sin perder las etapas ni el historial', () => {
+    const legacyStages = [{ id: 'desarrollo', name: 'Desarrollo e implementación', optimistic: 2, mostLikely: 4, pessimistic: 8 }];
+    const migrated = migrateTaskTypeStore({
+      version: 2,
+      estimates: [{ id: 'e1', project: { name: 'Bug viejo', taskType: 'bug', stages: legacyStages, quick: { taskType: 'bug', anchorHours: 4, complexity: 'alta', requirementsClarity: 'parcial' } } }],
+      history: [{ taskType: 'bug', estimateId: 'e1', estimatedHours: 4, actualHours: 6 }],
+      team: TEAM,
+    });
+    const [estimate] = migrated.estimates;
+    assert.equal(migrated.version, 3);
+    assert.deepEqual(estimate.project.stages, legacyStages);
+    assert.equal(estimate.project.quick.complexity, 'alta');
+    assert.equal(estimate.project.quick.developmentHours, 4);
+    assert.equal(estimate.project.quick.customized, true);
+    assert.equal(migrated.history[0].complexity, 'alta');
+    assert.ok(!('taskType' in estimate.project) && !('taskType' in migrated.history[0]));
   });
 
   it('el aviso de doble conteo se oculta cuando el equipo ya revisó sus reuniones', () => {
     const estimate = createNewEstimate('2026-11-16');
-    regenerateStages(estimate, []);
+    estimate.project.stages.push({ id: 'reuniones', name: 'Reuniones de la iniciativa', kind: STAGE_KIND.COORDINATION, optimistic: 1, mostLikely: 2, pessimistic: 3 });
     const team = { people: createSampleProject('2026-11-16').people, calendar: {}, meetingsReviewed: false };
     assert.ok(computeEstimate(estimate, team, [], 0).warnings.some(isDoubleCountWarning));
     assert.ok(!computeEstimate(estimate, { ...team, meetingsReviewed: true }, [], 0).warnings.some(isDoubleCountWarning));
@@ -62,5 +91,6 @@ describe('Estimaciones guardadas', () => {
     const summary = summarizeResult(computeEstimate(createNewEstimate('2026-11-16'), TEAM, [], 200));
     assert.ok(summary.p80Date >= summary.p50Date);
     assert.ok(summary.p80Hours >= summary.expectedHours * 0.8);
+    assert.ok(summary.rolloutDate && summary.rolloutP80Date >= summary.rolloutDate);
   });
 });

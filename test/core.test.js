@@ -4,14 +4,15 @@ import {
   buildEstimate,
   computeActivityEffort,
   computeEffectiveCapacity,
+  buildStagesFromAnswers,
   createSampleProject,
-  createStagesFromTemplate,
   EstimationInputError,
   percentError,
   renderMarkdownSummary,
   scheduleActivities,
+  STAGE_ID,
+  STAGE_KIND,
   summarizeCalibration,
-  TASK_TYPE,
 } from '../src/core/index.js';
 
 /** Lunes sin feriados, para que las fechas esperadas sean fáciles de razonar. */
@@ -150,17 +151,19 @@ describe('Estimación completa', () => {
     assert.ok(p50.effortHours <= p80.effortHours);
   });
 
-  it('desactivar una etapa hereda sus dependencias (bug: sin planificación ni UX)', () => {
-    const project = { name: 'Bug', startDate: MONDAY, people: SINGLE_DEV, stages: createStagesFromTemplate(TASK_TYPE.BUG) };
-    const estimate = buildEstimate(project, { runs: 0 });
-    const development = estimate.stages.find((stage) => stage.id === 'desarrollo');
-    const research = estimate.stages.find((stage) => stage.id === 'investigacion');
-    assert.ok(development.startDate >= research.endDate);
-    assert.ok(!estimate.stages.some((stage) => stage.id === 'planificacion'));
+  it('desactivar una etapa hereda sus dependencias (sin pruebas, el rollout sigue al desarrollo)', () => {
+    const stages = buildStagesFromAnswers({ complexity: 'baja' }).stages.map((stage) => (stage.id === STAGE_ID.TESTING ? { ...stage, included: false } : stage));
+    const estimate = buildEstimate({ name: 'Sin pruebas', startDate: MONDAY, people: SINGLE_DEV, stages }, { runs: 0 });
+    const development = estimate.stages.find((stage) => stage.id === STAGE_ID.DEVELOPMENT);
+    const rollout = estimate.stages.find((stage) => stage.id === STAGE_ID.ROLLOUT);
+    assert.ok(rollout.startDate >= development.endDate);
+    assert.ok(!estimate.stages.some((stage) => stage.id === STAGE_ID.TESTING));
   });
 
-  it('advierte posible doble conteo entre la etapa de coordinación y las reuniones descontadas', () => {
-    const estimate = buildEstimate(createSampleProject(MONDAY), { runs: 0 });
+  it('advierte posible doble conteo entre una etapa de reuniones y las reuniones descontadas', () => {
+    const project = createSampleProject(MONDAY);
+    project.stages.push({ id: 'reuniones', name: 'Reuniones', kind: STAGE_KIND.COORDINATION, optimistic: 1, mostLikely: 2, pessimistic: 3 });
+    const estimate = buildEstimate(project, { runs: 0 });
     assert.ok(estimate.warnings.some((warning) => warning.startsWith('Posible doble conteo')));
   });
 
@@ -169,6 +172,7 @@ describe('Estimación completa', () => {
     assert.match(summary, /## Esfuerzo por etapa/);
     assert.match(summary, /P80/);
     assert.match(summary, /## Supuestos/);
+    assert.match(summary, /Fecha de rollout/);
   });
 });
 
@@ -179,14 +183,14 @@ describe('Historial', () => {
 
   it('calibra con la mediana real/estimado de tareas similares', () => {
     const records = [
-      { taskType: 'bug', estimatedHours: 4, actualHours: 6 },
-      { taskType: 'bug', estimatedHours: 2, actualHours: 3 },
-      { taskType: 'bug', estimatedHours: 5, actualHours: 5 },
-      { taskType: 'feature', estimatedHours: 20, actualHours: 40 },
+      { complexity: 'baja', estimatedHours: 4, actualHours: 6 },
+      { complexity: 'baja', estimatedHours: 2, actualHours: 3 },
+      { complexity: 'baja', estimatedHours: 5, actualHours: 5 },
+      { complexity: 'alta', estimatedHours: 20, actualHours: 40 },
     ];
-    const calibration = summarizeCalibration(records, { taskType: 'bug' });
+    const calibration = summarizeCalibration(records, { complexity: 'baja' });
     assert.equal(calibration.sampleCount, 3);
     assert.equal(calibration.medianRatio, 1.5);
-    assert.equal(summarizeCalibration(records, { taskType: 'feature' }), null);
+    assert.equal(summarizeCalibration(records, { complexity: 'alta' }), null);
   });
 });
